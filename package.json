@@ -22,6 +22,7 @@
     "test:ai": "node --test tests/ai*.test.mjs",
     "ai:verify": "node --env-file-if-exists=.env scripts/ai-verify.mjs",
     "test:ai:browser": "node scripts/test-ai-browser.mjs",
-    "ai:skill:check": "node --env-file-if-exists=.env scripts/ai-skill-check.mjs"
+    "ai:skill:check": "node --env-file-if-exists=.env scripts/ai-skill-check.mjs",
+    "ai:speech:check": "node --env-file-if-exists=.env scripts/ai-speech-check.mjs"
   }
 }

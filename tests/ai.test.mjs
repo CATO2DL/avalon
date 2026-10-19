@@ -55,11 +55,14 @@ test('host-only opt-in, remove/transfer rules, missing adapter blocks AI start o
   f.cmd(f.users[0],f.code,{type:'remove_ai',expectedRevision:f.store.load(f.code).revision});assert.equal(f.snapshot().room.members.length,4);assert.ok(f.snapshot().room.members.every(p=>!p.ready));
 });
 test('discussion turn authorization, stale/duplicate speech and game-action gate preserve state',async t=>{
-  const f=setup(t);await f.begin();const s=f.snapshot(),d=s.room.discussion,before=JSON.stringify(f.store.load(f.code));
-  assert.throws(()=>f.cmd(f.users[1],f.code,{type:'speak',turnId:d.turnId,text:'impersonate'}),/NOT_YOUR_TURN/);assert.equal(JSON.stringify(f.store.load(f.code)),before);
-  const id=randomUUID();const body={type:'speak',turnId:d.turnId,text:'<script>untrusted public game data</script>',requestId:id};f.cmd(f.users[0],f.code,body);f.cmd(f.users[0],f.code,body);assert.equal(f.snapshot().room.messages.length,1);
-  assert.throws(()=>f.cmd(f.users[0],f.code,{...body,requestId:randomUUID()}),/NOT_YOUR_TURN/);
-  assert.throws(()=>f.cmd(f.users[0],f.code,{type:'action',requestId:randomUUID(),roundId:s.roundId,action:{}}),/DISCUSSION_PENDING/);
+  const f=setup(t);await f.begin();
+  if(!f.users.some(u=>f.snapshot(u).room.selfId===f.snapshot().room.discussion.speakerId))await f.ai.tick();
+  const s=f.snapshot(),d=s.room.discussion,before=JSON.stringify(f.store.load(f.code));
+  const speaker=f.users.find(u=>f.snapshot(u).room.selfId===d.speakerId),other=f.users.find(u=>u!==speaker);
+  assert.throws(()=>f.cmd(other,f.code,{type:'speak',turnId:d.turnId,text:'impersonate'}),/NOT_YOUR_TURN/);assert.equal(JSON.stringify(f.store.load(f.code)),before);
+  const count=s.room.messages.length,id=randomUUID();const body={type:'speak',turnId:d.turnId,text:'<script>untrusted public game data</script>',requestId:id};f.cmd(speaker,f.code,body);f.cmd(speaker,f.code,body);assert.equal(f.snapshot().room.messages.length,count+1);
+  assert.throws(()=>f.cmd(speaker,f.code,{...body,requestId:randomUUID()}),/NOT_YOUR_TURN/);
+  assert.throws(()=>f.cmd(speaker,f.code,{type:'action',requestId:randomUUID(),roundId:s.roundId,action:{}}),/DISCUSSION_PENDING/);
 });
 test('per-player view and memory boundaries preserve ambiguous candidates and hidden identities',()=>{
   const players=Array.from({length:10},(_,i)=>({id:`p${i}`,name:`p${i}`}));const game=createTestGame({playerCount:10,roles:['merlin','percival','loyal','loyal','loyal','loyal','assassin','morgana','mordred','oberon']},players,29);
@@ -115,7 +118,7 @@ test('different AI rooms keep actor memory isolated and a full call budget survi
   for(let i=1;i<4;i++){f.cmd(otherUsers[i],code,{type:'join',name:`other${i}`});f.cmd(otherUsers[i],code,{type:'seat',seat:i+1});}
   f.cmd(otherUsers[0],code,{type:'add_ai',seat:5,expectedRevision:f.store.load(code).revision});
   for(const u of otherUsers)f.cmd(u,code,{type:'ready',ready:true,configVersion:0});f.cmd(otherUsers[0],code,{type:'start',expectedRevision:f.store.load(code).revision});f.advance(3100);await f.ai.tick();for(const u of otherUsers)f.cmd(u,code,{type:'confirm'});
-  for(const u of otherUsers){const s=f.store.snapshot(code,u);f.cmd(u,code,{type:'speak',turnId:s.room.discussion.turnId,text:'other room only'});}
+  while(true){const s=f.store.snapshot(code,otherUsers[0]),u=otherUsers.find(u=>f.store.snapshot(code,u).room.selfId===s.room.discussion.speakerId);if(!u)break;f.cmd(u,code,{type:'speak',turnId:s.room.discussion.turnId,text:'other room only'});}
   await f.ai.tick();assert.equal(calls.length,2);assert.equal(calls[1].memory.legacyNote,'');assert.notEqual(calls[1].view.self.playerId,calls[0].view.self.playerId);assert.equal(f.store.db.prepare('SELECT count(*) n FROM ai_memory').get().n,2);
   assert.ok(!JSON.stringify(f.snapshot()).includes('other room only'));
 });

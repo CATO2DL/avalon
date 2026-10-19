@@ -14,7 +14,7 @@ export class AIRuntime {
     this.db.exec(`CREATE TABLE IF NOT EXISTS ai_jobs(id TEXT PRIMARY KEY, code TEXT NOT NULL, game TEXT NOT NULL, actor TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, input TEXT NOT NULL, result TEXT, error TEXT, retryAt INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS ai_memory(game TEXT NOT NULL, actor TEXT NOT NULL, memory TEXT NOT NULL, PRIMARY KEY(game,actor));
       CREATE TABLE IF NOT EXISTS ai_calls(job TEXT NOT NULL, attempt INTEGER NOT NULL, model TEXT NOT NULL, started INTEGER NOT NULL, elapsed INTEGER, tokens INTEGER, cost TEXT NOT NULL DEFAULT 'unknown', status TEXT NOT NULL, input TEXT NOT NULL, action TEXT, PRIMARY KEY(job,attempt));`);
-    store.aiAvailable=!!adapter;store.aiRuntime=this;
+    store.aiAvailable=!!adapter&&adapter.available!==false;store.aiRuntime=this;
     // Startup room cleanup may have run before these optional AI tables existed.
     this.transaction(()=>{
       this.db.exec('DELETE FROM ai_calls WHERE job IN (SELECT id FROM ai_jobs WHERE code NOT IN (SELECT code FROM rooms)); DELETE FROM ai_jobs WHERE code NOT IN (SELECT code FROM rooms);');
@@ -35,6 +35,7 @@ export class AIRuntime {
       }
     }});
   }
+  adapterFor(actor){return this.adapter?.forProfile?this.adapter.forProfile(actor?.aiProfile??'gemini'):this.adapter;}
   transaction(fn){this.db.exec('BEGIN IMMEDIATE');try{const r=fn();this.db.exec('COMMIT');return r;}catch(e){if(this.db.isTransaction)this.db.exec('ROLLBACK');throw e;}}
   saveRoom(room){room.revision++;room.updatedAt=this.store.clock();this.db.prepare('UPDATE rooms SET data=? WHERE code=?').run(JSON.stringify(room),room.code);}
   problem(code,error){const r=this.store.load(code);if(r.aiProblem!==error){r.aiProblem=error;this.saveRoom(r);}}
@@ -51,8 +52,10 @@ export class AIRuntime {
     const job=this.db.prepare("SELECT * FROM ai_jobs WHERE code=? AND status='failed' ORDER BY rowid DESC LIMIT 1").get(room.code);
     // A deliberate server model change may recover one exhausted transient failure.
     // Keep the same job, ledger and game budget; never reset attempts or auto-retry it.
+    const selectedAdapter=this.adapterFor(room.members.find(p=>p.id===job?.actor));
+    if(!selectedAdapter)throw new RoomError('AI_NOT_CONFIGURED');
     const previous=job?this.db.prepare('SELECT model FROM ai_calls WHERE job=? ORDER BY attempt DESC LIMIT 1').get(job.id):null;
-    const switchedModelRecovery=job?.attempts===2&&previous&&previous.model!==this.adapter.model&&['TIMEOUT','NETWORK_ERROR','MODEL_UNAVAILABLE'].includes(job.error);
+    const switchedModelRecovery=job?.attempts===2&&previous&&previous.model!==selectedAdapter.model&&['TIMEOUT','NETWORK_ERROR','MODEL_UNAVAILABLE'].includes(job.error);
     if(!job||(this.maxCalls!==Infinity&&job.attempts>=2&&!switchedModelRecovery)||this.calls(room.game?.id)>=this.maxCalls)throw new RoomError('AI_RETRY_LIMIT');
     this.db.prepare("UPDATE ai_jobs SET status='queued',error=NULL WHERE id=?").run(job.id);room.aiProblem=null;return room;
   }
@@ -86,6 +89,7 @@ export class AIRuntime {
           this.store.execute(actor.session,room.code,{type:'confirm',requestId:`ai-confirm-${room.game.id}`});continue;
         }
         const task=this.task(room,actor);if(!task)continue;
+        const selectedAdapter=this.adapterFor(actor);if(!selectedAdapter){this.problem(room.code,'AI_NOT_CONFIGURED');continue;}
         let job=this.db.prepare('SELECT * FROM ai_jobs WHERE id=?').get(task.id);
         if(!job){this.db.prepare("INSERT INTO ai_jobs(id,code,game,actor,status,input) VALUES(?,?,?,?,'queued',?)").run(task.id,task.code,task.game,task.actor,JSON.stringify(task.input));job=this.db.prepare('SELECT * FROM ai_jobs WHERE id=?').get(task.id);}
         if(job.status==='responded'){this.commit(job);continue;}
@@ -101,18 +105,18 @@ export class AIRuntime {
         this.transaction(()=>{
           this.db.prepare("UPDATE ai_jobs SET status='inflight',attempts=attempts+1 WHERE id=?").run(job.id);
           job=this.db.prepare('SELECT * FROM ai_jobs WHERE id=?').get(job.id);
-          this.db.prepare("INSERT INTO ai_calls(job,attempt,model,started,status,input) VALUES(?,?,?,?,'inflight',?)").run(job.id,job.attempts,this.adapter.model,this.store.clock(),job.input);
+          this.db.prepare("INSERT INTO ai_calls(job,attempt,model,started,status,input) VALUES(?,?,?,?,'inflight',?)").run(job.id,job.attempts,selectedAdapter.model,this.store.clock(),job.input);
           this.problem(room.code,null);
         });
         const started=Date.now(),input=JSON.parse(job.input),abort=new AbortController();this.abort=abort;
         let timer;
         try{
-          const result=await Promise.race([this.adapter.decide(structuredClone(input),abort.signal),new Promise((_,reject)=>{timer=setTimeout(()=>{abort.abort();reject(new ModelError('TIMEOUT'));},this.timeout);})]);
+          const result=await Promise.race([selectedAdapter.decide(structuredClone(input),abort.signal),new Promise((_,reject)=>{timer=setTimeout(()=>{abort.abort();reject(new ModelError('TIMEOUT'));},this.timeout);})]);
           if(this.closed)break;
           const decision=parseDecision(result.decision,input);
           this.transaction(()=>{
             this.db.prepare("UPDATE ai_jobs SET status='responded',result=? WHERE id=?").run(JSON.stringify(decision),job.id);
-            this.db.prepare("UPDATE ai_calls SET status='responded',model=?,elapsed=?,tokens=?,action=? WHERE job=? AND attempt=?").run(String(result.model??this.adapter.model).slice(0,100),Date.now()-started,Number.isFinite(result.tokens)?result.tokens:null,input.kind==='action'?JSON.stringify(input.choices[decision.choice]):'speech',job.id,job.attempts);
+            this.db.prepare("UPDATE ai_calls SET status='responded',model=?,elapsed=?,tokens=?,action=? WHERE job=? AND attempt=?").run(String(result.model??selectedAdapter.model).slice(0,100),Date.now()-started,Number.isFinite(result.tokens)?result.tokens:null,input.kind==='action'?JSON.stringify(input.choices[decision.choice]):'speech',job.id,job.attempts);
           });
           this.commit(this.db.prepare('SELECT * FROM ai_jobs WHERE id=?').get(job.id));
         }catch(e){

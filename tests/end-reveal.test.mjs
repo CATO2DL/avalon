@@ -21,7 +21,10 @@ for(const n of [5,6,7,8,9,10])test(`${n} players: reveal only after all four ter
     let g=fixture(n);hidden(g);
     for(let q=0;q<3;q++){g=propose(g);hidden(g);g=voteAll(g);hidden(g);for(const id of [...g.team]){g=act(g,id,{type:'quest_card',card:'success'});hidden(g);}}
     assert.equal(g.phase,'assassination');hidden(g);
-    g=act(g,roleId(g,'assassin'),{type:'assassinate',targetId:roleId(g,hit?'merlin':'loyal')});revealed(g);
+    const target=roleId(g,hit?'merlin':'loyal');
+    assert.equal(getPublicView(g).events.some(e=>e.type==='assassination_resolved'),false);
+    g=act(g,roleId(g,'assassin'),{type:'assassinate',targetId:target});revealed(g);
+    assert.equal(getPublicView(g).events.find(e=>e.type==='assassination_resolved').targetId,target);
   }
   let g=fixture(n);
   for(let i=0;i<5;i++){g=propose(g);hidden(g);g=voteAll(g,0);if(i<4)hidden(g);}

@@ -2,10 +2,11 @@ import { el,button,avatar } from './ui.js';
 import { roleAssets } from './asset-map.js';
 export const requestId=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
 const $=id=>document.getElementById(id);
-const messages={GAME_NOT_FINISHED:'请先完成当前对局',MEMBER_IN_OTHER_ROOM:'有玩家已进入其他房间，请先让其离开该房间',AI_NOT_CONFIGURED:'尚未配置 Gemini 新密钥，请由房主在电脑 .env 填写并重启服务',AI_RETRY_LIMIT:'本次重试或本局调用额度已用完',DISCUSSION_PENDING:'请先完成本轮发言',NOT_YOUR_TURN:'还没轮到你发言',INVALID_SPEECH:'发言请控制在500字内',ROOM_FULL:'房间已满',ROOM_STARTED:'对局已经开始，不能加入',ROOM_NOT_FOUND:'找不到这个房间',ROOM_ACCESS_DENIED:'这个会话不属于该房间',HOST_REQUIRED:'只有房主可以操作',SEAT_TAKEN:'这个座位刚被占用，请选择其他座位',STALE_ROOM:'房间状态已变化，请重新确认',STALE_CONFIG:'配置已变化，请重新准备',NOT_ALL_READY:'请等所有玩家入座并准备',OCCUPIED_SEATS:'请先释放超出新人数的座位',INVALID_CONFIG:'角色配置不合法',INVALID_NAME:'昵称需为1–20个字符',ACTIVE_ROOM_EXISTS:'你已有进行中的房间，请返回原房间',REVEAL_PENDING:'请等待身份揭晓',STALE_ROUND:'阶段已变化，请确认当前操作',ALREADY_SUBMITTED:'你已提交过本轮行动',SESSION_REQUIRED:'会话已失效；无法凭昵称恢复原座位',ROOM_TERMINATED:'房间已终止',REQUEST_ID_REUSED:'请求编号冲突，请刷新',NOT_PLAYING:'当前还不能行动'};
+const messages={GAME_NOT_FINISHED:'请先完成当前对局',MEMBER_IN_OTHER_ROOM:'有玩家已进入其他房间，请先让其离开该房间',AI_NOT_CONFIGURED:'该 AI 接口未配置，请在电脑 .env 配置后重启服务',AI_RETRY_LIMIT:'本次重试或本局调用额度已用完',DISCUSSION_PENDING:'请先完成本轮发言',NOT_YOUR_TURN:'还没轮到你发言',INVALID_SPEECH:'发言请控制在500字内',ROOM_FULL:'房间已满',ROOM_STARTED:'对局已经开始，不能加入',ROOM_NOT_FOUND:'找不到这个房间',ROOM_ACCESS_DENIED:'这个会话不属于该房间',HOST_REQUIRED:'只有房主可以操作',SEAT_TAKEN:'这个座位刚被占用，请选择其他座位',STALE_ROOM:'房间状态已变化，请重新确认',STALE_CONFIG:'配置已变化，请重新准备',NOT_ALL_READY:'请等所有玩家入座并准备',OCCUPIED_SEATS:'请先释放超出新人数的座位',INVALID_CONFIG:'角色配置不合法',INVALID_NAME:'昵称需为1–20个字符',ACTIVE_ROOM_EXISTS:'你已有进行中的房间，请返回原房间',REVEAL_PENDING:'请等待身份揭晓',STALE_ROUND:'阶段已变化，请确认当前操作',ALREADY_SUBMITTED:'你已提交过本轮行动',SESSION_REQUIRED:'会话已失效；无法凭昵称恢复原座位',ROOM_TERMINATED:'房间已终止',REQUEST_ID_REUSED:'请求编号冲突，请刷新',NOT_PLAYING:'当前还不能行动'};
 export function createMultiplayer({receive,openPanel,closePanel,showIdentity,rulesPanel,catalogue}){
   const screen=el('section','room-screen');screen.id='room-screen';document.querySelector('.screen-layout').before(screen);
   let boot,current,code=new URLSearchParams(location.search).get('room')?.toUpperCase()??localStorage.getItem('avalon-last-room'),connected=false,pending=false,polling=false,signature='',identityOpened=false;
+  let chatReadOnly=false;
   let chatPanel=false,chatSignature='',chatDraft='';
   let joinTarget=null,recovered=false;const storageKey='avalon-pending-request';
   async function request(path,body){
@@ -61,7 +62,12 @@ export function createMultiplayer({receive,openPanel,closePanel,showIdentity,rul
     const img=el('img','invite-qr');img.alt='房间邀请二维码';img.src=`/api/rooms/${code}/qr`;img.addEventListener('error',()=>{img.hidden=true;body.append(el('p','','二维码加载失败，请使用上面的链接。'));});body.append(img);
     body.append(el('p','panel-note','所有设备连接同一 Wi-Fi。二维码仅含房间入口，不含座位凭证。'));openPanel('邀请朋友','invite',body);
   }
-  function settings(){if(!current){rulesPanel();return;}const r=current.room,mine=r.members.find(p=>p.id===r.selfId),body=el('div');
+  function settings(){if(!current){rulesPanel();return;}const r=current.room,mine=r.members.find(p=>p.id===r.selfId),body=el('div','room-settings-body');
+    const intro=el('div','settings-overview');intro.append(el('span','settings-eyebrow','AVALON · ROOM'),el('h3','',`房间 ${r.code}`),el('p','',`${r.members.length}/${r.config.playerCount} 人 · ${r.status==='lobby'?'等待准备':r.status==='finished'?'本局已结束':'对局进行中'}`));body.append(intro);
+    const config=el('section','room-role-summary');config.append(el('h3','',`本局角色配置 · ${r.config.playerCount}人`));
+    const counts=new Map();for(const id of r.config.roles)counts.set(id,(counts.get(id)??0)+1);
+    const list=el('div','room-role-counts');for(const [id,count] of counts){const role=roleAssets[id];list.append(el('span',role.alignment==='正义'?'role-count good':'role-count evil',`${role.name} ×${count}`));}
+    config.append(list);body.append(config);
     body.append(button('邀请朋友',share),button('查看规则',rulesPanel),button('角色图鉴',catalogue));
     if(r.members.some(p=>p.kind==='ai'))body.append(button('文字讨论',discussion));
     if(r.aiProblem){body.append(el('p','ai-problem',aiMessage(r.aiProblem)));if(r.selfId===r.hostId&&!['RATE_LIMIT','RATE_LIMIT_EXHAUSTED','CALL_LIMIT'].includes(r.aiProblem))body.append(button('重试 AI',()=>{closePanel();command({type:'ai_retry',expectedRevision:current.revision});}));}
@@ -75,8 +81,11 @@ export function createMultiplayer({receive,openPanel,closePanel,showIdentity,rul
     },'danger'));
     if(r.status==='finished'&&r.selfId===r.hostId)body.append(button('再来一局',rematch,'primary'));
     if(['finished','terminated'].includes(r.status))body.append(button('返回首页',()=>{closePanel();home();}));
+    const models=el('section','settings-models');models.append(el('h3','','AI 接口'));
+    for(const p of boot.aiProfiles??[]){const row=el('div','provider-row');row.append(el('strong','',p.label),el('span',p.available?'provider-ready':'provider-off',p.available?'已配置':'未配置'));models.append(row);}
+    models.append(el('p','panel-note','在电脑配置密钥；大厅添加 AI 时选择接口。'));body.append(models);
     const members=el('ul','room-presence');for(const p of r.members)members.append(el('li','',`${p.seat??'未入座'}号 · ${p.name} · ${p.online?'在线':'离线'}`));body.append(members);
-    if(mine)body.append(el('p','panel-note',`你的座位：${mine.seat??'尚未认领'} · ${mine.name}`));openPanel('设置与规则','room-settings',body);
+    if(mine)body.append(el('p','panel-note',`你的座位：${mine.seat??'尚未认领'} · ${mine.name}`));openPanel('房间设置','room-settings',body);
   }
   function renderRoom(){
     if(!current)return;const r=current.room,mine=r.members.find(p=>p.id===r.selfId);
@@ -101,7 +110,11 @@ export function createMultiplayer({receive,openPanel,closePanel,showIdentity,rul
       if(r.members.length<r.config.playerCount){
         const label=el('label','field','添加 AI 到空座位'),select=el('select');select.setAttribute('aria-label','AI 座位');
         for(let n=1;n<=r.config.playerCount;n++)if(!r.members.some(p=>p.seat===n)){const o=el('option','',`${n}号`);o.value=n;select.append(o);}label.append(select);
-        screen.append(label,button('添加 Gemini AI',()=>command({type:'add_ai',seat:Number(select.value),expectedRevision:current.revision})));
+        const aiBox=el('section','ai-add-card'),providerLabel=el('label','field','模型供应商'),provider=el('select');provider.setAttribute('aria-label','AI 模型供应商');
+        const profiles=boot.aiProfiles?.length?boot.aiProfiles:[{id:'gemini',label:'Gemini',available:boot.aiAvailable}];
+        for(const p of profiles){const o=el('option','',`${p.label}${p.available?'':' · 未配置'}`);o.value=p.id;o.disabled=!p.available;provider.append(o);}provider.value=profiles.find(p=>p.available)?.id??'gemini';providerLabel.append(provider);
+        const add=button('添加 AI 玩家',()=>command({type:'add_ai',seat:Number(select.value),aiProfile:provider.value,expectedRevision:current.revision}),'primary');add.disabled=!profiles.some(p=>p.available);
+        aiBox.append(el('h3','','AI 玩家'),label,providerLabel,add);screen.append(aiBox);
       }
     }
     if(r.members.some(p=>p.kind==='ai'))screen.append(el('p','panel-note',boot.aiAvailable?'含 AI 的房间：每次组队前轮流文字发言，可跳过。':'AI 等待配置：在电脑填写新密钥并重启，再开始游戏。'));
@@ -112,23 +125,26 @@ export function createMultiplayer({receive,openPanel,closePanel,showIdentity,rul
     const start=button(r.selfId===r.hostId?'开始游戏':'等待房主开始',()=>command({type:'start',expectedRevision:current.revision}));start.disabled=pending||r.selfId!==r.hostId||r.members.length!==r.config.playerCount||r.members.some(p=>!p.ready)||(r.members.some(p=>p.kind==='ai')&&!boot.aiAvailable);$('actions').append(start);
     $('notice').textContent='配置变化后，所有玩家需要重新准备';
   }
-  function aiMessage(code){return ({AI_NOT_CONFIGURED:'AI 等待配置，请房主填写新密钥并重启服务',RATE_LIMIT:'AI 暂时限流，30秒后自动重试一次',RATE_LIMIT_EXHAUSTED:'AI 配额不足，本次重试已用完',AUTH_FAILED:'AI 认证失败，请检查新密钥',MODEL_UNAVAILABLE:'配置的模型不可用',MODEL_REQUEST_REJECTED:'模型拒绝请求，请检查模型配置',TIMEOUT:'AI 请求超时，已暂停',NETWORK_ERROR:'AI 网络请求失败，已暂停',FORMAT_ERROR:'AI 返回格式错误，已暂停',INVALID_MODEL_ACTION:'AI 行动未通过校验，已暂停',CALL_LIMIT:'本局 AI 调用额度已用完',UNCERTAIN_REQUEST:'重启前的 AI 请求结果不确定，已暂停'})[code]??'AI 已暂停';}
-  function discussion(){chatPanel=true;chatSignature='';openPanel('文字讨论','discussion',el('div'));refreshDiscussion();}
+  function aiMessage(code){return ({AI_NOT_CONFIGURED:'该 AI 接口未配置，请房主检查配置并重启服务',RATE_LIMIT:'AI 暂时限流，30秒后自动重试一次',RATE_LIMIT_EXHAUSTED:'AI 配额不足，本次重试已用完',AUTH_FAILED:'AI 认证失败，请检查新密钥',MODEL_UNAVAILABLE:'配置的模型不可用',MODEL_REQUEST_REJECTED:'模型拒绝请求，请检查模型配置',TIMEOUT:'AI 请求超时，已暂停',NETWORK_ERROR:'AI 网络请求失败，已暂停',FORMAT_ERROR:'AI 返回格式错误，已暂停',INVALID_MODEL_ACTION:'AI 行动未通过校验，已暂停',CALL_LIMIT:'本局 AI 调用额度已用完',UNCERTAIN_REQUEST:'重启前的 AI 请求结果不确定，已暂停'})[code]??'AI 已暂停';}
+  function chatHistory(){chatReadOnly=true;chatPanel=true;chatSignature='';openPanel('聊天记录','chat-history',el('div'));refreshDiscussion();}
+  function discussion(){chatReadOnly=false;chatPanel=true;chatSignature='';openPanel('文字讨论','discussion',el('div'));refreshDiscussion();}
   function refreshDiscussion(){
-    if(!chatPanel||!$('panel').open||document.getElementById('panel-title')?.textContent!=='文字讨论'){chatPanel=false;return;}
+    if(!chatPanel||!$('panel').open||document.getElementById('panel-title')?.textContent!==(chatReadOnly?'聊天记录':'文字讨论')){chatPanel=false;return;}
     const r=current?.room;if(!r)return;
     const sig=JSON.stringify([r.discussion,r.messages,r.aiProblem]);if(sig===chatSignature)return;chatSignature=sig;
-    const body=el('div','discussion-body'),log=el('ol','discussion-log');
+    const previous=$('panel-body').querySelector('.discussion-log');
+    const oldTop=previous?.scrollTop??0,atBottom=!previous||previous.scrollHeight-previous.scrollTop-previous.clientHeight<24;
+    const body=el('div','discussion-body'+(chatReadOnly?' chat-history-body':'')),log=el('ol','discussion-log');
     for(const m of r.messages){const p=r.members.find(p=>p.id===m.playerId),item=el('li');item.append(el('strong','',`${p?.seat}号 ${p?.name}：`),el('span','',m.text||'跳过'));log.append(item);}
     if(!r.messages.length)body.append(el('p','panel-note','还没有发言'));body.append(log);
     const d=r.discussion,own=d?.active&&d.speakerId===r.selfId;
-    if(d?.active){const speaker=r.members.find(p=>p.id===d.speakerId);body.append(el('p','',own?'轮到你发言':`等待 ${speaker?.name} 发言`));}
-    if(own){const input=el('textarea','speech-input');input.maxLength=500;input.rows=3;input.placeholder='说说你的判断（最多500字）';input.setAttribute('aria-label','公开发言');input.value=chatDraft;input.addEventListener('input',()=>chatDraft=input.value);
+    if(!chatReadOnly&&d?.active){const speaker=r.members.find(p=>p.id===d.speakerId);body.append(el('p','',own?'轮到你发言':`等待 ${speaker?.name} 发言`));}
+    if(!chatReadOnly&&own){const input=el('textarea','speech-input');input.maxLength=500;input.rows=3;input.placeholder='说说你的判断（最多500字）';input.setAttribute('aria-label','公开发言');input.value=chatDraft;input.addEventListener('input',()=>chatDraft=input.value);
       const send=text=>{chatDraft='';command({type:'speak',turnId:d.turnId,text});};
       body.append(input,button('发送发言',()=>send(input.value),'primary'),button('跳过发言',()=>send('')));
     }
-    if(r.aiProblem){body.append(el('p','ai-problem',aiMessage(r.aiProblem)));if(r.selfId===r.hostId&&!['RATE_LIMIT','RATE_LIMIT_EXHAUSTED','CALL_LIMIT'].includes(r.aiProblem))body.append(button('重试 AI',()=>command({type:'ai_retry',expectedRevision:current.revision})));}
-    $('panel-body').replaceChildren(body);log.scrollTop=log.scrollHeight;
+    if(!chatReadOnly&&r.aiProblem){body.append(el('p','ai-problem',aiMessage(r.aiProblem)));if(r.selfId===r.hostId&&!['RATE_LIMIT','RATE_LIMIT_EXHAUSTED','CALL_LIMIT'].includes(r.aiProblem))body.append(button('重试 AI',()=>command({type:'ai_retry',expectedRevision:current.revision})));}
+    $('panel-body').replaceChildren(body);log.scrollTop=atBottom?log.scrollHeight:oldTop;
   }
   async function poll(){
     if(pending||polling)return;polling=true;
@@ -151,5 +167,5 @@ export function createMultiplayer({receive,openPanel,closePanel,showIdentity,rul
   window.addEventListener('offline',()=>{connected=false;lock();$('error').hidden=false;$('error').textContent='连接已断开，座位与身份保留。恢复网络后自动同步。';});
   async function start(){try{boot=await request('/api/session');const active=boot.rooms.find(r=>!['finished','terminated'].includes(r.status));if(active)remember(active.code);await poll();if(!code||!current)renderHome();}catch(e){error(e);screen.append(button('重新连接',start));}}
   start();
-  return {settings,command,rematch,share,discussion,aiMessage,get current(){return current;},get connected(){return connected;},openIdentity(){identityOpened=true;signature='';},stop:()=>clearInterval(interval)};
+  return {settings,command,rematch,share,discussion,chatHistory,aiMessage,get current(){return current;},get connected(){return connected;},openIdentity(){identityOpened=true;signature='';},stop:()=>clearInterval(interval)};
 }

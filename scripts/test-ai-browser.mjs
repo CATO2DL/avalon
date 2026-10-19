@@ -21,12 +21,12 @@ try{
   }
   const host=clients[0];await expect.poll(()=>host.snapshot?.room.members.filter(p=>p.seat!==null).length).toBe(humanCount);
   for(let seat=humanCount+1;seat<=5;seat++){
-    await host.page.getByRole('combobox',{name:'AI 座位'}).selectOption(String(seat));await host.page.getByRole('button',{name:'添加 Gemini AI',exact:true}).click();await expect(host.page.getByRole('button',{name:`移除 AI · ${seat}号`,exact:true})).toBeVisible();
+    await host.page.getByRole('combobox',{name:'AI 座位'}).selectOption(String(seat));await host.page.getByRole('button',{name:'添加 AI 玩家',exact:true}).click();await expect(host.page.getByRole('button',{name:`移除 AI · ${seat}号`,exact:true})).toBeVisible();
   }
   if(multi){
     await host.page.getByRole('button',{name:'移除 AI · 3号',exact:true}).click();await expect(host.page.getByRole('button',{name:'移除 AI · 3号',exact:true})).toHaveCount(0);
     await expect(host.page.getByRole('button',{name:'移除 AI · 2号',exact:true})).toBeVisible();
-    await host.page.getByRole('combobox',{name:'AI 座位'}).selectOption('3');await host.page.getByRole('button',{name:'添加 Gemini AI',exact:true}).click();await expect(host.page.getByRole('button',{name:'移除 AI · 3号',exact:true})).toBeVisible();
+    await host.page.getByRole('combobox',{name:'AI 座位'}).selectOption('3');await host.page.getByRole('button',{name:'添加 AI 玩家',exact:true}).click();await expect(host.page.getByRole('button',{name:'移除 AI · 3号',exact:true})).toBeVisible();
     await host.page.setViewportSize({width:320,height:844});assert.ok(await host.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await host.page.setViewportSize({width:390,height:844});
   }
   await host.page.screenshot({path:fileURLToPath(new URL('ai-lobby-mobile.png',artifact))});

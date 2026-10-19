@@ -4,7 +4,7 @@ import { networkInterfaces } from 'node:os';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { AIRuntime } from './ai-runtime.mjs';
-import { modelAdapter } from './model-adapter.mjs';
+import { providerRegistry } from './ai-providers.mjs';
 import { RoomStore } from './room-store.mjs';
 import { RoomError, record, configOptions } from '../src/rooms.ts';
 import { RuleError } from '../src/errors.ts';
@@ -54,7 +54,7 @@ export function createRoomServer({dbPath=fileURLToPath(new URL('../.local/multip
           if(entry.n>100)return send(429,{error:'RATE_LIMIT'});
           const token=store.newSession();session=store.session(token);res.setHeader('Set-Cookie',`${cookie}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000`);
         }
-        store.touch(session);return send(200,{rooms:store.list(session),configOptions:configOptions(),inviteOrigin,lanEnabled:lan,aiAvailable:!!aiAdapter});
+        store.touch(session);return send(200,{rooms:store.list(session),configOptions:configOptions(),inviteOrigin,lanEnabled:lan,aiAvailable:!!aiAdapter&&aiAdapter.available!==false,aiProfiles:aiAdapter?.profiles??[]});
       }
       const match=path.match(/^\/api\/rooms\/([A-F0-9]{10})(?:\/(public|qr))?$/);
       if(req.method==='GET'&&match?.[2]==='public')return send(200,store.snapshot(match[1],null));
@@ -86,7 +86,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   process.umask(0o077);
   const port=Number(process.env.PORT??4180),lan=process.argv.includes('--lan');
   if(!Number.isInteger(port)||port<1||port>65535)throw new Error('Invalid PORT');
-  const server=createRoomServer({lan,aiAdapter:modelAdapter(),aiOptions:{maxCalls:process.env.AI_MAX_CALLS_PER_GAME,minInterval:process.env.AI_MIN_INTERVAL_MS},...(process.env.AVALON_DB?{dbPath:process.env.AVALON_DB}:{}),...(process.env.PUBLIC_ORIGIN?{publicOrigin:process.env.PUBLIC_ORIGIN}:{})});
+  const server=createRoomServer({lan,aiAdapter:providerRegistry(),aiOptions:{maxCalls:process.env.AI_MAX_CALLS_PER_GAME,minInterval:process.env.AI_MIN_INTERVAL_MS},...(process.env.AVALON_DB?{dbPath:process.env.AVALON_DB}:{}),...(process.env.PUBLIC_ORIGIN?{publicOrigin:process.env.PUBLIC_ORIGIN}:{})});
   server.on('error',e=>{console.error(e.code??'LISTEN_FAILED');process.exitCode=1;});
   server.listen(port,lan?'0.0.0.0':'127.0.0.1',()=>{
     console.log(`阿瓦隆真人联机： http://127.0.0.1:${port}/`);

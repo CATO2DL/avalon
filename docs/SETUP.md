@@ -114,3 +114,9 @@ npm run demo
 `demo` 是测试脚本，不是真实 AI。浏览器自动测试需要另装浏览器，可选执行 `node .local/toolchain/node_modules/playwright/cli.js install chromium`，再执行 `npm run test:browser`。真人多设备体验仍需实际试玩，测试通过不代表公网安全或正式产品验收。
 
 再次分享时请使用原始 ZIP，或至少去掉 `.env`、`.local/multiplayer/`、`.local/ai/`、日志与会话数据。不要直接压缩运行后的整个目录。
+
+## 多接口与最新交互（2026-10-20）
+
+大厅可为每个 AI 分别选择 Gemini、DeepSeek、通义千问或自定义 HTTPS Chat Completions 接口。在 .env 填写 .env.example 中对应密钥、模型与地址；新接口不自动调用、不自动替换。保存后重启服务。`npm run ai:check -- deepseek`（或 qwen、compatible）会进行一次实际请求，消耗供应商额度。千问的地址须与密钥区域对应。
+
+每轮讨论从队长开始按座位轮转；流局由新队长先说。投票历史与聊天记录独立，终局展示刺杀目标，设置可查看本局角色数量。已完成189项测试及类型检查；新供应商真实调用、完整真实模型对局和真人多设备验收仍待验证。

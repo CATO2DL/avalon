@@ -49,6 +49,8 @@ export class RoomStore {
           room=this.aiRuntime.retry(session,room,body);
         }else{
           if(body.type==='start'&&room.members.some(p=>p.kind==='ai')&&!this.aiAvailable)throw new RoomError('AI_NOT_CONFIGURED');
+          if(body.type==='add_ai'&&body.aiProfile&&!this.aiRuntime?.adapterFor({aiProfile:body.aiProfile}))throw new RoomError('AI_NOT_CONFIGURED');
+          if(body.type==='start'&&room.members.some(p=>p.kind==='ai'&&!this.aiRuntime?.adapterFor(p)))throw new RoomError('AI_NOT_CONFIGURED');
           const changed=changeRoom(room,session,body,now);
           if(body.type==='rematch'&&room.members.some(p=>p.kind!=='ai'&&this.list(p.session).some(other=>other.code!==code&&!['finished','terminated'].includes(other.status))))throw new RoomError('MEMBER_IN_OTHER_ROOM');
           room=changed;

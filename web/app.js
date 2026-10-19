@@ -12,10 +12,13 @@ let state, me = null, busy = false, playing = false, timer, selection = [], sele
 $('identity-toggle').append(icon('eye')); $('identity-toggle').addEventListener('click',showIdentity); $('settings').append(icon('settings')); $('close-panel').append(icon('close')); $('disc-icon').append(icon('sword'));
 const playerName = id => state?.view.players.find(p => p.id === id)?.name ?? '未知玩家';
 const legal = () => me?.legalActions[0];
+$('chat-history-entry').hidden=!isMultiplayer;
+$('chat-history-entry').addEventListener('click',()=>multiplayer?.chatHistory());
+$('history-entry').addEventListener('click',()=>showHistory(state?.view?.questNumber??1));
 function pause() { playing = false; clearTimeout(timer); }
 function openPanel(title, kind, content) {
   pause(); renderActions(); lastFocus = document.activeElement;
-  panelKind = kind; $('panel-title').textContent = title; $('panel-body').replaceChildren(content);
+  panelKind = kind; $('panel').dataset.kind=kind; $('panel-title').textContent = title; $('panel-body').replaceChildren(content);
   if (!$('panel').open) $('panel').showModal();
   $('panel').scrollTop=0;
   $('close-panel').focus();
@@ -74,21 +77,38 @@ function showIdentity() {
 function showHistory(n) {
   const v=state.view, body=el('div');
   const items=taskHistory(v,n);
-  body.append(el('p','panel-note',`需要 ${state.rules.teamSizes[n-1]} 人，${state.rules.failThresholds[n-1]} 张失败牌才会使任务失败。流局指提案被否决，任务并未执行。`));
-  if(!items.length) body.append(el('p','knowledge',n>v.questNumber?'这次任务尚未开始。':'尚无组队提案。'));
+  body.className='history-panel';
+  const summary=el('div','history-summary');summary.append(el('span','',`${state.rules.teamSizes[n-1]} 人任务`),el('span','',`${state.rules.failThresholds[n-1]} 张失败牌判负`),el('span','',`${items.length} 次组队`));body.append(summary);
+  if(!items.length) body.append(el('p','history-empty',n>v.questNumber?'尚未开始这次任务':'等待第一位队长组队'));
+  const seat=id=>v.players.findIndex(p=>p.id===id)+1;
   items.forEach((item,i)=>{
-    const node=el('article','proposal'); node.append(el('h3','',`第 ${i+1} 次提案 · ${playerName(item.leaderId)} 任队长`),el('p','',`队伍：${item.team.map(playerName).join('、')}`));
-    if(!item.vote) node.append(el('span','badge','等待投票收齐 · 票值未公开'));
+    const node=el('article','history-card'),header=el('header','history-card-header');
+    const title=el('div');title.append(el('small','',`第 ${i+1} 次组队`),el('h3','',`${seat(item.leaderId)}号 · ${playerName(item.leaderId)} 开车`));
+    header.append(title,el('span',`history-status ${item.vote?(item.vote.approved?'passed':'rejected'):'pending'}`,item.vote?(item.vote.approved?'队伍通过':'流局'):'投票中'));node.append(header);
+    const team=el('div','history-team');team.append(el('span','history-label','上车队员'));
+    for(const id of item.team)team.append(el('span','team-chip',`${seat(id)}号 · ${playerName(id)}`));node.append(team);
+    if(!item.vote)node.append(el('p','history-empty','等待投票收齐'));
     else {
-      const approved=item.vote.votes.filter(b=>b.vote==='approve').length;
-      node.append(el('span',`badge ${item.vote.approved?'good':'bad'}`,item.vote.approved?'队伍通过':`流局 · ${approved*2===v.players.length?'平票否决':'提案被否决'}（未执行任务）`));
-      const votes=el('div','votes'); item.vote.votes.forEach(b=>votes.append(el('span','',`${playerName(b.playerId)}：${b.vote==='approve'?'赞成':'反对'}`))); node.append(votes);
-      if(item.result) node.append(el('p','',`任务${item.result.succeeded?'成功':'失败'} · 匿名汇总：${item.result.successCount} 成功 / ${item.result.failCount} 失败。`));
-      else if(item.vote.approved) node.append(el('p','','任务尚未结算，不公开出牌者或未收齐的牌值。'));
+      const yes=item.vote.votes.filter(b=>b.vote==='approve').length,total=item.vote.votes.length;
+      const tally=el('div','vote-tally');tally.append(el('strong','approve',`✓ ${yes} 赞成`),el('span','',yes*2===total?'平票':`${total} 人投票`),el('strong','reject',`${total-yes} 反对 ×`));node.append(tally);
+      const bar=el('div','vote-bar');const fill=el('span');fill.style.width=`${yes/total*100}%`;bar.append(fill);bar.setAttribute('aria-hidden','true');node.append(bar);
+      const votes=el('div','ballot-grid');
+      for(const player of v.players){const vote=item.vote.votes.find(b=>b.playerId===player.id);if(!vote)continue;
+        const card=el('div',`ballot ${vote.vote==='approve'?'approve':'reject'}`),face=el('span','ballot-avatar');face.append(avatar(seat(player.id)-1));
+        const who=el('div','ballot-who');who.append(el('strong','',`${seat(player.id)}号 · ${player.name}`),el('small','',item.team.includes(player.id)?'上车':'未上车'));
+        card.append(face,who,el('span','ballot-choice',vote.vote==='approve'?'✓ 赞成':'× 反对'));votes.append(card);
+      }node.append(votes);
+      const result=el('div',`history-result ${item.result?(item.result.succeeded?'passed':'failed'):''}`);
+      if(item.result)result.append(el('strong','',item.result.succeeded?'任务成功':'任务失败'),el('span','',`${item.result.successCount} 成功牌 · ${item.result.failCount} 失败牌`));
+      else result.append(el('strong','',item.vote.approved?'等待任务结果':'未执行任务'),el('span','',item.vote.approved?'任务牌收齐后结算':'否决不计任务失败'));
+      node.append(result);
     }
     body.append(node);
   });
   if(v.outcome?.reason==='five_rejections'&&n===v.questNumber)body.append(el('p','knowledge',outcomes.five_rejections));
+  const tabs=el('nav','history-tabs');
+  for(let q=1;q<=5;q++){const b=button(`任务 ${q}`,()=>showHistory(q),q===n?'primary':'');b.setAttribute('aria-pressed',String(q===n));tabs.append(b);}
+  body.prepend(tabs);
   openPanel(`第 ${n} 次任务 · 历史`,'history',body);
 }
 function makeSelect(label, options, value) {
@@ -97,7 +117,7 @@ function makeSelect(label, options, value) {
 }
 function settings() {
   if(isMultiplayer){multiplayer?.settings();return;}
-  const body=el('div');body.append(el('p','panel-note','本地单人练习，其余席位由脚本操作。修改配置会开启新局，不改变当前对局。'));
+  const body=el('div','local-settings-body');body.append(el('p','panel-note','本地单人练习，其余席位由脚本操作。修改配置会开启新局，不改变当前对局。'));
   const count=makeSelect('参与人数',[5,6,7,8,9,10].map(n=>[String(n),`${n} 人`]),state.view.players.length);
   const mode=makeSelect('运行模式',[['practice','单人练习 · 操作自己的席位'],['public','公共演示 · 只看公开信息']],state.mode);
   const scenario=makeSelect('脚本路线',[['sabotage','任务破坏 · 邪恶脚本选择失败'],['assassination','通往刺杀 · 脚本任务选择成功'],['rejections','连续否决 · 脚本反对组队']],state.scenario);
@@ -183,7 +203,7 @@ function render() {
   $('phase-count').textContent=v.phase==='proposal'?`${selection.length} / ${v.teamSize}`:v.phase==='voting'?`${v.submissions.votes} / ${v.players.length}`:v.phase==='quest'?`${v.submissions.questCards} / ${v.teamSize}`:v.phase==='assassination'?'最后一剑':`${v.score.good} : ${v.score.evil}`;
   $('good-score').textContent=v.score.good;$('evil-score').textContent=v.score.evil;
   $('identity-hint').textContent='';
-  $('notice').textContent=v.outcome?'':v.phase==='proposal'?`${playerName(v.leaderId)} 是队长，选择 ${v.teamSize} 人出发`:
+  $('notice').textContent=v.outcome?'':v.phase==='proposal'?`${v.rejectionCount?'上队被否决 · ':''}${playerName(v.leaderId)} 开车，选择 ${v.teamSize} 人出发`:
     v.phase==='voting'?`队伍投票 ${v.submissions.votes} / ${v.players.length}`:v.phase==='quest'?`任务出牌 ${v.submissions.questCards} / ${v.teamSize}`:legal()?.type==='assassinate'?'选出梅林':'等待刺客选择';
   const last=v.quests.at(-1);$('latest-public').textContent=last?`最近任务：第 ${last.questNumber} 次${last.succeeded?'成功':'失败'}，${last.successCount} 张成功 / ${last.failCount} 张失败。`:'暂无任务结果。点击上方任务节点，查看每次提案与投票。';
   renderSeats();renderStage();renderActions();
@@ -250,6 +270,11 @@ function renderStage(){
   }else{
     const won=me?me.self.alignment===v.outcome.winner:null;
     hero.append(el('h2','',won===null?(v.outcome.winner==='good'?'正义胜利':'邪恶胜利'):won?'你胜利了':'你失败了'),el('p','',outcomes[v.outcome.reason]));
+    const assassination=v.events.findLast(e=>e.type==='assassination_resolved');
+    if(assassination){
+      const target=v.players.find(p=>p.id===assassination.targetId),role=v.revealedRoles?.find(r=>r.playerId===assassination.targetId);
+      if(target){const summary=el('div','final-assassination');summary.append(el('strong','',`刺杀目标：${v.players.indexOf(target)+1}号 · ${target.name}`),el('span','',`${role?roleAssets[role.role].name+' · ':''}${v.outcome.reason==='merlin_assassinated'?'命中梅林':'未命中梅林'}`));hero.append(summary);}
+    }
     box.append(hero,el('p','final-score',`任务结果：${v.score.good} 次成功 · ${v.score.evil} 次失败`),el('h3','reveal-title','全员身份'));
     const grid=el('div','revealed-grid');
     for(const r of v.revealedRoles??[]){

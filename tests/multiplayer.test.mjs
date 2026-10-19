@@ -182,3 +182,16 @@ test('rematch cannot pull a player out of another active room',async t=>{
   assert.equal((await clients[0].cmd(code,{type:'rematch',expectedRevision:s.revision})).data.error,'MEMBER_IN_OTHER_ROOM');
   assert.equal((await clients[0].state(code)).revision,s.revision);
 });
+
+test('rejected team passes driving to next seat in the same quest over HTTP',async t=>{
+ const f=await fixture(t),{clients,code}=await group(f);await begin(clients,code);
+ let states=await Promise.all(clients.map(c=>c.state(code)));const before=states[0].view;
+ const index=states.findIndex(s=>s.player.self.playerId===before.leaderId);
+ const a=states[index].player.legalActions[0];ok(await submit(clients[index],code,states[index],{type:'propose_team',team:a.candidateIds.slice(0,a.teamSize)}));
+ states=await Promise.all(clients.map(c=>c.state(code)));
+ await Promise.all(clients.map((c,i)=>submit(c,code,states[i],{type:'vote',vote:'reject'}).then(ok)));
+ states=await Promise.all(clients.map(c=>c.state(code)));const after=states[0].view;
+ assert.equal(after.phase,'proposal');assert.equal(after.questNumber,before.questNumber);assert.deepEqual(after.score,before.score);
+ assert.equal(after.leaderId,before.players[(index+1)%5].id);
+ assert.equal(states[index].player.legalActions.length,0);assert.equal(states[(index+1)%5].player.legalActions[0].type,'propose_team');
+});

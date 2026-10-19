@@ -18,7 +18,16 @@ export function loadStrategy(input){
     const heading=`## ${phaseTitles[phase]}`;
     const section=phases.split(/(?=^## )/m).find(s=>s.split('\n')[0].trim()===heading);
     if(!section)throw new Error('MISSING_PHASE');
-    const text=[strategyContract,core,own,section,'宿主补充再次生效：'+strategyContract].join('\n\n');
+    const seat=input.view.public.players.findIndex(p=>p.id===input.view.self.playerId);
+    const styles=['简短直接，给出取舍','先问一个具体问题，再给倾向','对比两种方案，指出风险','回应上一位的具体观点，不复述','关注投票与组队矛盾'];
+    const playbook=`发言执行约束（不是固定台词）：你是公开座位${seat+1}号；本轮队长是${input.view.public.players.findIndex(p=>p.id===input.view.public.leaderId)+1}号。发言倾向：${styles[(seat+styles.length)%styles.length]}，风格与身份无关。
+先核对public.events、当前team和publicMessages再说话：proposal且team为空表示还未正式提名，不能说“队长已经提出这辆车”或替别人宣称自己是队长。分清别人发言中的建议与已提交队伍。
+成功任务只能说明这次没出现足够失败牌，不能认证车上全是正义，邪恶可以交成功牌养身份。不存在的队伍、投票、失败牌或线下交流都不能当证据。
+每轮只选一个实质目的：提出具体车队/换位，追问一个座位，针对上一位给出反驳或有条件赞同，或修正自己先前判断。参考全部公开历史但不要复述。禁止连续模板式“合理、稳妥、希望顺利、大家加油”；没有新信息可短说或跳过，不凑字数。用座位号交流（公开ID与座位对应：${JSON.stringify(input.view.public.players.map((p,i)=>({id:p.id,seat:i+1})))}），禁止把UUID或p1这样的内部ID念出来；阵营称为正义/邪恶。通常20–80汉字，不照抄前一人的句式。
+行动必须兑现自己的公开立场；如改变投票或组队，下一次有发言机会时说明真实公开变化，不编造证据。记忆保留自己承诺、假跳及反证。不要把玩家说“我是正义”直接当成认证。
+梅林专属（只在本人真是梅林时适用）：优先争取自己上车；无公开证据时不要精准点名多个邪恶或报出完美正义名单，不要自称有身份信息，也不要每轮替全桌纠错。私有知识用于选择合法安全队伍，公开表达只给有限偏好、问题或真实公开依据；可以让别人成为讨论中心。不得为了掩护故意送出决定胜负的坏车，不强制随机投票。任务三胜后依然可能被刺杀。
+邪恶的骗人应有明确目标：争取上车、保队友、制造可争论的视角、误导刺杀；不能大家机械同意同一个理由。忠臣和派西维尔也应独立质疑成功车，不根据系统未给的信息发言。`;
+    const text=[strategyContract,core,own,section,'宿主补充再次生效：'+strategyContract,playbook].join('\n\n');
     const version='play-avalon-v1:'+createHash('sha256').update(text).digest('hex').slice(0,16);
     return {version,resources:['runtime-core.md',roleFiles[role],`phases.md#${phaseTitles[phase]}`],phase:phaseTitles[phase],text};
   }catch{throw new ModelError('STRATEGY_RESOURCE_ERROR');}

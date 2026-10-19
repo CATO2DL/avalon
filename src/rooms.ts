@@ -2,7 +2,7 @@ import { createGame, applyAction, getPlayerView, getPublicView, getRules, getRec
 import type { Game, ResolvedConfig, Action } from './types.ts';
 
 export type RoomStatus = 'lobby' | 'revealing' | 'playing' | 'finished' | 'terminated';
-export interface Member { id:string; session:string; name:string; seat:number|null; ready:boolean; confirmed:boolean; kind?:'ai' }
+export interface Member { id:string; session:string; name:string; seat:number|null; ready:boolean; confirmed:boolean; kind?:'ai'; aiProfile?:string }
 /** Stored only on server; never serialize Room directly. */
 export interface Speech { playerId:string; text:string; turnId:string }
 export interface Discussion { roundId:string; order:string[]; cursor:number }
@@ -44,11 +44,12 @@ export function changeRoom(room:Room,session:string,input:Record<string,unknown>
   if(r.status==='terminated')return fail('ROOM_TERMINATED');
   switch(input.type){
     case 'add_ai': {
-      fields(input,['requestId','type','seat','expectedRevision']);host();lobby();current();
+      fields(input,['requestId','type','seat','expectedRevision',...('aiProfile' in input?['aiProfile']:[])]);host();lobby();current();
+      if('aiProfile' in input&& !['gemini','deepseek','qwen','compatible'].includes(String(input.aiProfile)))fail('INVALID_AI_PROFILE');
       if(r.members.length>=r.config.playerCount)fail('ROOM_FULL');
       if(!Number.isInteger(input.seat)||Number(input.seat)<1||Number(input.seat)>r.config.playerCount)fail('INVALID_SEAT');
       if(r.members.some(p=>p.seat===input.seat))fail('SEAT_TAKEN');
-      r.members.push({id:crypto.randomUUID(),session:`ai:${crypto.randomUUID()}`,name:`Gemini ${input.seat}`,seat:Number(input.seat),ready:true,confirmed:false,kind:'ai'});
+      r.members.push({id:crypto.randomUUID(),session:`ai:${crypto.randomUUID()}`,name:`Gemini ${input.seat}`,seat:Number(input.seat),ready:true,confirmed:false,kind:'ai',...('aiProfile' in input?{aiProfile:String(input.aiProfile),name:`${({gemini:'Gemini',deepseek:'DeepSeek',qwen:'千问',compatible:'AI'})[String(input.aiProfile) as 'gemini']} ${input.seat}`}:{})});
       r.members.filter(p=>p.kind!=='ai').forEach(p=>p.ready=false);break;
     }
     case 'remove_ai': {
@@ -134,7 +135,9 @@ export function changeRoom(room:Room,session:string,input:Record<string,unknown>
     default:fail('INVALID_REQUEST');
   }
   if(r.status==='playing'&&r.game?.phase==='proposal'&&r.members.some(p=>p.kind==='ai')&&r.discussion?.roundId!==roundId(r.game)){
-    r.discussion={roundId:roundId(r.game),order:r.members.map(p=>p.id),cursor:0};
+    const {players,leaderIndex}=r.game;
+    const order=[...players.slice(leaderIndex),...players.slice(0,leaderIndex)].map(p=>p.id);
+    r.discussion={roundId:roundId(r.game),order,cursor:0};
   }
   return r;
 }
@@ -151,7 +154,7 @@ export function roomSnapshot(r:Room,session:string|null,now:number,online:(sessi
     ?r.members.filter(p=>getPlayerView(r.game!,p.id).legalActions.length>0).map(p=>p.id):[];
   return {mode:'multiplayer',serverNow:now,revision:r.revision,room:{
     code:r.code,status:r.status,config:r.config,configVersion:r.configVersion,hostId:r.hostId,revealAt:r.revealAt,
-    members:r.members.map(p=>({id:p.id,name:p.name,seat:p.seat,ready:p.ready,confirmed:p.confirmed,online:p.kind==='ai'||online(p.session),kind:p.kind??'human'})),
+    members:r.members.map(p=>({id:p.id,name:p.name,seat:p.seat,ready:p.ready,confirmed:p.confirmed,online:p.kind==='ai'||online(p.session),kind:p.kind??'human',...(p.kind==='ai'?{aiProfile:p.aiProfile??'gemini'}:{})})),
     selfId:mine?.id??null,waitingIds:discussing?[r.discussion!.order[r.discussion!.cursor]]:waiting,
     discussion:r.discussion?{active:discussing,speakerId:r.discussion.order[r.discussion.cursor]??null,turnId:`${r.discussion.roundId}:${r.discussion.cursor}`} : null,
     messages:r.messages??[],aiProblem:r.aiProblem??null,

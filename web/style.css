@@ -993,3 +993,66 @@ body[data-multiplayer] #action-help{overflow:hidden;text-overflow:ellipsis;white
 .target-player .teammate-badge { position:absolute; top:4px; left:4px; padding:2px 5px; border:1px solid #b27482; border-radius:5px; background:#522535; color:#ffe0e5; font-size:10px; line-height:1.3; }
 
 .target-role { color:#ffe0e5; font-size:11px; line-height:15px; }
+
+.history-entry { width:100%; min-height:44px; margin:0 0 6px; padding:6px 12px; border:1px solid #b79550; border-radius:12px; color:#ffe0a0; background:#12354b; font-weight:700; font-size:14px; text-align:left; }
+.history-tabs { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; margin-bottom:14px; }
+.history-tabs button { min-width:0; min-height:44px; padding:4px; font-size:13px; }
+.room-role-summary { margin-bottom:16px; padding:12px; border:1px solid #54739c; border-radius:12px; }
+.room-role-summary h3 { margin:0 0 10px; }
+.room-role-counts { display:flex; flex-wrap:wrap; gap:8px; }
+.role-count { padding:6px 10px; border-radius:8px; background:#163e53; font-size:14px; }
+.role-count.good { color:#83e5de; }.role-count.evil { color:#ffacb0; }
+
+/* Shared compact panels and readable voting records. */
+dialog { background:linear-gradient(145deg,#102c44,#081d32); border-color:#36566c; box-shadow:0 24px 80px #0009; }
+.panel-header { background:#102a41f5; backdrop-filter:blur(12px); }
+.history-tabs { gap:6px; margin-bottom:12px; }
+.history-tabs button { border-radius:10px; background:#16364d; border:1px solid #345069; color:#a9bed0; }
+.history-tabs button[aria-pressed="true"] { background:#28484e; color:#ffe0a0; border-color:#c09c54; box-shadow:inset 0 -2px #c09c54; }
+.history-summary { display:flex; flex-wrap:wrap; gap:6px 14px; color:#aac1d1; font-size:12px; padding:0 2px 14px; }
+.history-card { overflow:hidden; border:1px solid #365166; border-radius:14px; background:#102d43; margin-bottom:14px; }
+.history-card-header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:14px; background:#17394e; }
+.history-card-header small { color:#9fb9ca; font-size:11px; }
+.history-card-header h3 { margin:4px 0 0; font-size:14px; overflow-wrap:anywhere; }
+.history-status { flex-shrink:0; font-size:11px; font-weight:700; border-radius:7px; padding:5px 8px; background:#294457; color:#c0d2de; }
+.history-status.passed { background:#164d49; color:#8ce1ca; }
+.history-status.rejected { background:#534332; color:#f0ce91; }
+.history-team { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:12px 14px; border-bottom:1px solid #28455a; }
+.history-label { color:#92acbf; font-size:11px; margin-right:2px; }
+.team-chip { font-size:11px; padding:4px 7px; border-radius:6px; background:#27485b; overflow-wrap:anywhere; }
+.vote-tally { display:flex; align-items:center; justify-content:space-between; gap:4px; padding:12px 14px 7px; font-size:12px; }
+.vote-tally>span { color:#92acbf; font-size:10px; }
+.approve { color:#88dfc5; }.reject { color:#f3a5ac; }
+.vote-bar { height:4px; background:#a65c68; margin:0 14px 12px; border-radius:4px; overflow:hidden; }
+.vote-bar>span { height:100%; display:block; background:#55b8a0; }
+.ballot-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; padding:0 10px 12px; }
+.ballot { display:grid; grid-template-columns:24px minmax(0,1fr); gap:3px 7px; padding:8px; border-radius:8px; background:#0b2336; border:1px solid #284356; }
+.ballot-avatar { grid-row:span 2; align-self:center; }.ballot-avatar svg { display:block; width:24px; height:24px; }
+.ballot-who { min-width:0; }.ballot-who strong { display:block; color:#e1ebed; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ballot-who small { display:none; }.ballot-choice { grid-column:2; font-size:11px; font-weight:700; }
+.history-result { display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px; padding:11px 14px; background:#0b2538; border-top:1px solid #28455a; font-size:11px; color:#a8bdcb; }
+.history-result strong { color:#d4e2e8; }.history-result.passed strong { color:#88dfc5; }.history-result.failed strong { color:#f3a5ac; }
+.history-empty { text-align:center; padding:20px 12px; color:#9fb7c9; font-size:13px; }
+.room-settings-body { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.room-settings-body>button { border-radius:10px; min-height:44px; padding:10px; font-size:13px; background:#17384e; border:1px solid #36566c; }
+.room-settings-body>.room-role-summary,.room-settings-body>.room-presence,.room-settings-body>p { grid-column:1/-1; }
+.room-settings-body>.room-role-summary { margin:0 0 4px; background:#102d43; border-radius:14px; }
+.room-role-summary h3 { font-size:15px; }.room-role-counts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.room-settings-body>.room-presence { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; padding:12px 0; margin:0; list-style:none; border-top:1px solid #36566c; }
+.room-presence li { font-size:11px; color:#abc0ce; overflow-wrap:anywhere; }
+@media(max-width:380px) { .history-card-header,.history-team { padding:10px; } .ballot-grid { padding:0 7px 10px; gap:5px; }.ballot { padding:6px; gap:3px 5px; } }
+
+.final-assassination { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:5px 12px; padding:8px 12px; margin:8px 0 0; border:1px solid #976776; border-radius:10px; background:#392838; font-size:12px; color:#ffe0e4; }.final-assassination strong { overflow-wrap:anywhere; }.final-assassination span { color:#e9bbc3; }
+
+.record-entries { display:flex; gap:8px; }.record-entries .history-entry { flex:1; min-width:0; text-align:center; }.chat-history-body .discussion-log { max-height:62dvh; list-style:none; padding:0; margin:0; }.chat-history-body .discussion-log li { margin:0 0 10px; padding:12px 14px; background:#143249; border:1px solid #2b4c61; border-radius:12px; font-size:13px; line-height:1.7; }.chat-history-body .discussion-log strong { margin-bottom:5px; font-size:12px; }.chat-history-body .discussion-log span { white-space:pre-wrap; }
+
+.settings-overview,.settings-models { grid-column:1/-1; padding:14px; border:1px solid #345469; border-radius:14px; background:linear-gradient(130deg,#1b4255,#102a40); }
+.settings-overview h3 { font-size:20px; margin:7px 0; }.settings-overview p { color:#acc3ce; font-size:12px; margin:0; }.settings-eyebrow { letter-spacing:.15em; font-size:10px; color:#dbbd7e; }
+.settings-models h3 { margin:0 0 8px; font-size:14px; }.provider-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #2d475b; font-size:12px; }.provider-ready {color:#8adbc0}.provider-off {color:#92a7b5}.settings-models .panel-note { margin:8px 0 0; font-size:11px; }
+.room-settings-body>button.danger { color:#ffadb7; border-color:#81535e; background:#422d3a; }
+.ai-add-card { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:14px; border:1px solid #36566c; border-radius:14px; background:#102e44; margin:12px 0; }.ai-add-card h3,.ai-add-card>button {grid-column:1/-1;margin:0}.ai-add-card .field {margin:0;min-width:0}.ai-add-card select {width:100%;min-width:0;font-size:13px}
+.room-screen {border:1px solid #29485d;border-radius:18px;padding:18px;background:linear-gradient(150deg,#102c43,#081e32)}
+.room-screen>h2 {font-size:22px;letter-spacing:.02em}.lobby-seat {border-radius:13px;background:#113149;border:1px solid #34566a}.lobby-seat.self {border-color:#d1ae62;box-shadow:inset 0 0 0 1px #d1ae6233}
+.field input,.field select {border-radius:10px;border:1px solid #3a5c72;background:#0d273c;color:#e2edf2;padding:10px;min-height:44px;}
+
+.local-settings-body {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.local-settings-body>p,.local-settings-body>fieldset,.local-settings-body>.panel-buttons,.local-settings-body>button {grid-column:1/-1}.local-settings-body .field {margin:0;min-width:0}.local-settings-body select {width:100%;min-width:0}.local-settings-body .panel-buttons {margin:0}.role-options {border:1px solid #36566c;border-radius:12px;padding:12px;background:#102c42}.role-option {border-radius:8px;padding:8px;background:#18374c}.role-option input {accent-color:#54c4ad}dialog[data-kind="room-config"] .field select {width:100%}
