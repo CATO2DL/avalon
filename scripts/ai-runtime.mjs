@@ -14,6 +14,9 @@ export class AIRuntime {
     this.db.exec(`CREATE TABLE IF NOT EXISTS ai_jobs(id TEXT PRIMARY KEY, code TEXT NOT NULL, game TEXT NOT NULL, actor TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, input TEXT NOT NULL, result TEXT, error TEXT, retryAt INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS ai_memory(game TEXT NOT NULL, actor TEXT NOT NULL, memory TEXT NOT NULL, PRIMARY KEY(game,actor));
       CREATE TABLE IF NOT EXISTS ai_calls(job TEXT NOT NULL, attempt INTEGER NOT NULL, model TEXT NOT NULL, started INTEGER NOT NULL, elapsed INTEGER, tokens INTEGER, cost TEXT NOT NULL DEFAULT 'unknown', status TEXT NOT NULL, input TEXT NOT NULL, action TEXT, PRIMARY KEY(job,attempt));`);
+    // Per-attempt validated output; never backfill failed attempts from a later successful job.
+    if(!this.db.prepare("PRAGMA table_info(ai_calls)").all().some(c=>c.name==='decision'))this.db.exec("ALTER TABLE ai_calls ADD COLUMN decision TEXT");
+    if(!this.db.prepare("PRAGMA table_info(ai_calls)").all().some(c=>c.name==='failure_stage'))this.db.exec("ALTER TABLE ai_calls ADD COLUMN failure_stage TEXT");
     store.aiAvailable=!!adapter&&adapter.available!==false;store.aiRuntime=this;
     // Startup room cleanup may have run before these optional AI tables existed.
     this.transaction(()=>{
@@ -118,13 +121,13 @@ export class AIRuntime {
           const decision=parseDecision(result.decision,input);
           this.transaction(()=>{
             this.db.prepare("UPDATE ai_jobs SET status='responded',result=? WHERE id=?").run(JSON.stringify(decision),job.id);
-            this.db.prepare("UPDATE ai_calls SET status='responded',model=?,elapsed=?,tokens=?,action=? WHERE job=? AND attempt=?").run(String(result.model??selectedAdapter.model).slice(0,100),Date.now()-started,Number.isFinite(result.tokens)?result.tokens:null,input.kind==='action'?JSON.stringify(input.choices[decision.choice]):'speech',job.id,job.attempts);
+            this.db.prepare("UPDATE ai_calls SET status='responded',model=?,elapsed=?,tokens=?,action=?,decision=? WHERE job=? AND attempt=?").run(String(result.model??selectedAdapter.model).slice(0,100),Date.now()-started,Number.isFinite(result.tokens)?result.tokens:null,input.kind==='action'?JSON.stringify(input.choices[decision.choice]):'speech',JSON.stringify(decision),job.id,job.attempts);
           });
           this.commit(this.db.prepare('SELECT * FROM ai_jobs WHERE id=?').get(job.id));
         }catch(e){
           if(this.closed)break;
           const error=safeModelError(e).message;this.fail(job,error==='RATE_LIMIT'&&job.attempts>=2?'RATE_LIMIT_EXHAUSTED':error);
-          this.db.prepare('UPDATE ai_calls SET elapsed=? WHERE job=? AND attempt=?').run(Date.now()-started,job.id,job.attempts);
+          this.db.prepare('UPDATE ai_calls SET elapsed=?,failure_stage=? WHERE job=? AND attempt=?').run(Date.now()-started,['connecting','waiting_response','generating','correcting','validating'].includes(e.stage)?e.stage:null,job.id,job.attempts);
           // Only a definitive rate rejection is automatically retried, once; timeout/auth/format await host.
           if(error==='RATE_LIMIT'&&job.attempts<2)this.transaction(()=>this.db.prepare("UPDATE ai_jobs SET status='queued',retryAt=? WHERE id=?").run(this.store.clock()+30000,job.id));
         }finally{clearTimeout(timer);this.abort=null;}

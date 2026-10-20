@@ -24,15 +24,23 @@ export function loadStrategy(input){
 先核对public.events、当前team和publicMessages再说话：proposal且team为空表示还未正式提名，不能说“队长已经提出这辆车”或替别人宣称自己是队长。分清别人发言中的建议与已提交队伍。
 成功任务只能说明这次没出现足够失败牌，不能认证车上全是正义，邪恶可以交成功牌养身份。不存在的队伍、投票、失败牌或线下交流都不能当证据。
 每轮只选一个实质目的：提出具体车队/换位，追问一个座位，针对上一位给出反驳或有条件赞同，或修正自己先前判断。参考全部公开历史但不要复述。禁止连续模板式“合理、稳妥、希望顺利、大家加油”；没有新信息可短说或跳过，不凑字数。用座位号交流（公开ID与座位对应：${JSON.stringify(input.view.public.players.map((p,i)=>({id:p.id,seat:i+1})))}），禁止把UUID或p1这样的内部ID念出来；阵营称为正义/邪恶。通常20–80汉字，不照抄前一人的句式。
-行动必须兑现自己的公开立场；如改变投票或组队，下一次有发言机会时说明真实公开变化，不编造证据。记忆保留自己承诺、假跳及反证。不要把玩家说“我是正义”直接当成认证。
+公开组队和投票应考虑自己的公开立场；改判要说明真实公开变化。秘密任务出牌以阵营获胜为目标，不能因公开支持队伍就强迫邪恶交成功牌；公开诈唬不等于内部信念。记忆保留自己承诺、假跳及反证。不要把玩家说“我是正义”直接当成认证。
 梅林专属（只在本人真是梅林时适用）：优先争取自己上车；无公开证据时不要精准点名多个邪恶或报出完美正义名单，不要自称有身份信息，也不要每轮替全桌纠错。私有知识用于选择合法安全队伍，公开表达只给有限偏好、问题或真实公开依据；可以让别人成为讨论中心。不得为了掩护故意送出决定胜负的坏车，不强制随机投票。任务三胜后依然可能被刺杀。
 刺杀阶段邪恶玩家自由发言，不按顺序，正义可旁观但不能说话；刺客随时可以刺杀，无需等待发言。此时请结合公开历史比较梅林嫌疑与反证，回应队友，帮助刺客选择目标，不再讨论组队或索取正义玩家回复；候选身份只能依据自身合法视角推测。
 邪恶的骗人应有明确目标：争取上车、保队友、制造可争论的视角、误导刺杀；不能大家机械同意同一个理由。忠臣和派西维尔也应独立质疑成功车，不根据系统未给的信息发言。`;
     const interaction=`当前否决规则：${input.view.public.config.rejectionMode==='cumulative'?'全局累计五次组队否决，队伍通过不清零':'连续五次组队否决，队伍通过清零'}；当前计数${input.view.public.rejectionCount}/5。若攻略有不同描述，以此为准。
 回应最近公开发言中的一个真实争议，可以追问具体玩家、辩解、支持、质疑或改判；没有争议就简短提出选择，不硬编矛盾。长短随内容变化，不强凑字数。不要复述前一人的模板。
 允许有目的地护队友、踩队友、假跳、挡刀和切割，但不放弃确定赢点、不无意义自爆。个性只影响语气和风险倾向，不改变规则权限，也不固定绑定角色。同模型的其他玩家不是共享记忆的同伴；配合只能来自自身可见信息和公开互动。`;
-    const text=[strategyContract,core,own,section,'宿主补充再次生效：'+strategyContract,playbook,interaction].join('\n\n');
-    const version='play-avalon-v1:'+createHash('sha256').update(text).digest('hex').slice(0,16);
+    const v=input.view.public, self=input.view.self;
+    const stageFocus=[];
+    if(input.kind==='action'&&v.phase==='quest'&&self.alignment==='evil'&&v.failThreshold===1){
+      if(v.score.evil===2)stageFocus.push('本次失败牌直接赢得全局；应选择失败，不能为潜伏放弃确定胜利。');
+      else if(v.score.good===2)stageFocus.push('警戒：正义已经两胜，本轮成功就进入刺杀。你能用一张失败阻止第三成功；不要沿用公开支持或合作形象作为成功牌理由。先考虑失败保留任务获胜路径。');
+    }
+    if(input.kind==='speech'&&v.phase==='proposal')stageFocus.push('现在就作出一个有内容的回应：给出自己的具体人员倾向，或针对最新争议提出可回答的问题。不要再说请队长提方案/稳妥试探/等待分析；如果无新内容允许空发言。');
+    if(input.kind==='speech'&&self.role==='merlin')stageFocus.push('你的真实身份和夜间知识不是公开证据；本次不要用我是梅林/已知邪恶名单作论据。用公开记录、有限偏好和替换建议表达，不编造历史。');
+    const text=[strategyContract,core,own,section,'宿主补充再次生效：'+strategyContract,playbook,interaction,'当前决策重点（由本人合法视角计算）：'+stageFocus.join(' ')].join('\n\n');
+    const version='play-avalon-v2:'+createHash('sha256').update(text).digest('hex').slice(0,16);
     return {version,resources:['runtime-core.md',roleFiles[role],`phases.md#${phaseTitles[phase]}`],phase:phaseTitles[phase],text};
   }catch{throw new ModelError('STRATEGY_RESOURCE_ERROR');}
 }

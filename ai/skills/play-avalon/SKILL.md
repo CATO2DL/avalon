@@ -33,3 +33,6 @@ description: 为中文阿瓦隆 AI 玩家提供按角色、阶段和局势加载
 - references/sources.md：攻略、研究和真人对话数据来源，以及规则适配限制。
 
 策略不是训练后的权重，也不保证胜率提升。用固定对手、交换阵营和座位的对照测试评估改动；实战不足时如实报告。
+
+## 本项目回放入口
+开发者可用scripts/ai-record-audit.mjs冻结真实玩家视角，再用scripts/ai-replay.mjs做有预算的同模型对照。这些是离线开发工具，不由实战玩家或前端调用。详细结果见项目docs/AI_STRATEGY_REVIEW.md，当前不声称策略整体提升。

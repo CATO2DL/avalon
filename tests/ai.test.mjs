@@ -175,6 +175,7 @@ test('structured strategy memory commits atomically with actual public speech an
   const read=()=>JSON.parse(f.store.db.prepare('SELECT memory FROM ai_memory').get().memory);
   const memory=read();assert.equal(memory.schemaVersion,1);assert.equal(memory.bluffs[0].claim,'假跳梅林');assert.equal(memory.publicStance.at(-1).summary,'我跳梅林，这次先听我建议。');assert.equal(JSON.parse(memory.knownFacts[0].summary).role,'morgana');
   assert(!JSON.stringify(f.snapshot()).includes('PRIVATE_GOAL'));assert(!JSON.stringify(f.store.snapshot(f.code,null)).includes('deliberate_bluff'));
-  const call=JSON.parse(f.store.db.prepare('SELECT input FROM ai_calls').get().input);assert.match(call.strategy.version,/play-avalon-v1:/);assert.equal(call.strategy.resources[1],'morgana.md');assert.equal(call.context.roomId,f.code);
+  const recorded=JSON.parse(f.store.db.prepare('SELECT decision FROM ai_calls').get().decision);assert.equal(recorded.speech,'我跳梅林，这次先听我建议。');assert.equal(recorded.memory.currentGoal,'PRIVATE_GOAL');
+  const call=JSON.parse(f.store.db.prepare('SELECT input FROM ai_calls').get().input);assert.match(call.strategy.version,/play-avalon-v2:/);assert.equal(call.strategy.resources[1],'morgana.md');assert.equal(call.context.roomId,f.code);
   await f.restart(adapter);assert.deepEqual(read(),memory);await finish(f);assert(captured.slice(1).some(x=>x.memory.bluffs.length));
 });

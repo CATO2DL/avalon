@@ -1,4 +1,5 @@
 import type { ActionPayload, PlayerView } from './types.ts';
+import { decisionBrief } from './ai-brief.ts';
 import type { Speech } from './rooms.ts';
 import { emptyPatch, memoryFor, validateMemoryPatch } from './ai-memory.ts';
 import type { PrivateMemory, MemoryPatch } from './ai-memory.ts';
@@ -8,7 +9,7 @@ import { getRules } from './config.ts';
 export interface ModelInput {
   kind:'action'|'speech'; view:PlayerView; publicMessages:Speech[];
   memory:PrivateMemory; choices:ActionPayload[];
-  context:{roomId:string;rules:ReturnType<typeof getRules>;nextLeaderId:string;discussion:{order:string[];cursor:number;turnId:string}|null};
+  context:{brief?:ReturnType<typeof decisionBrief>;roomId:string;rules:ReturnType<typeof getRules>;nextLeaderId:string;discussion:{order:string[];cursor:number;turnId:string}|null};
   strategy?:{version:string;resources:string[];phase:string;text:string};
 }
 export interface ModelDecision { choice:number; speech:string; memory:MemoryPatch|string }
@@ -31,7 +32,7 @@ export function actionChoices(view:PlayerView):ActionPayload[]{
 }
 export function modelInput(view:PlayerView,messages:Speech[],memory:unknown,kind:ModelInput['kind'],roomId='',discussion:ModelInput['context']['discussion']=null):ModelInput{
   const index=view.public.players.findIndex(p=>p.id===view.public.leaderId);
-  return {kind,view:structuredClone(view),publicMessages:structuredClone(messages),memory:memoryFor(view,messages,memory,roomId),choices:kind==='action'?actionChoices(view):[],context:{roomId,rules:getRules(view.public.config.playerCount),nextLeaderId:view.public.players[(index+1)%view.public.players.length]!.id,discussion:structuredClone(discussion)}};
+  return {kind,view:structuredClone(view),publicMessages:structuredClone(messages),memory:memoryFor(view,messages,memory,roomId),choices:kind==='action'?actionChoices(view):[],context:{brief:decisionBrief(view,messages),roomId,rules:getRules(view.public.config.playerCount),nextLeaderId:view.public.players[(index+1)%view.public.players.length]!.id,discussion:structuredClone(discussion)}};
 }
 export function parseDecision(raw:unknown,input:ModelInput,strictMemory=false):ModelDecision{
   if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new ModelError('FORMAT_ERROR');

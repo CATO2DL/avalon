@@ -6,6 +6,6 @@ import { safeModelError } from './gemini.mjs';
 // terminates this worker on result/timeout/abort, including a stalled handshake.
 try{
   const client=new GoogleGenAI({apiKey:workerData.apiKey,vertexai:false,httpOptions:{apiVersion:'v1beta',retryOptions:{attempts:1}}});
-  const result=await liveDecision(client,workerData.model,workerData.input);
+  const result=await liveDecision(client,workerData.model,workerData.input,undefined,{onProgress:stage=>parentPort.postMessage({progress:stage})});
   parentPort.postMessage({result});
 }catch(e){parentPort.postMessage({error:safeModelError(e).message,...(e.formatReason==='MISSING_TOOL_CALL'?{formatReason:e.formatReason}:{})});}

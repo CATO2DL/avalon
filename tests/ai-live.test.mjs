@@ -80,3 +80,9 @@ test('Live correction is bounded and never treats prose agreement as an action',
  await assert.rejects(liveDecision(f.client,'gemini-3.8-live',input),e=>e.message==='FORMAT_ERROR'&&e.formatReason==='MISSING_TOOL_CALL');
  assert.equal(f.observed.sent.length,2);assert.equal(f.observed.receipts.length,0);assert.equal(f.observed.closed,1);
 });
+
+test('timeout diagnostics expose only fixed progress stages, not provider payloads',async()=>{
+ const w=workerFake(),adapter=modelAdapter({apiKey:'fixture',model:'gemini-3.8-live',timeout:15,workerFactory:()=>w});
+ const pending=adapter.decide(input);w.emit('message',{progress:'correcting'});
+ await assert.rejects(pending,e=>e.message==='TIMEOUT'&&e.stage==='correcting');assert.equal(w.terminated,1);
+});

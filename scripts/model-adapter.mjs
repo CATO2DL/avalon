@@ -8,9 +8,9 @@ export function modelAdapter({apiKey=process.env.GEMINI_API_KEY,model=process.en
   return {model,decide(input,signal){
     return new Promise((resolve,reject)=>{
       if(signal?.aborted){reject(new ModelError('TIMEOUT'));return;}
-      let worker,settled=false,timer;
+      let worker,settled=false,timer,stage='connecting';
       const finish=(error,result)=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',cancel);if(worker)void worker.terminate().catch(()=>{});error?reject(error):resolve(result);};
-      const cancel=()=>finish(new ModelError('TIMEOUT'));
+      const cancel=()=>{const e=new ModelError('TIMEOUT');e.stage=stage;finish(e);};
       signal?.addEventListener('abort',cancel,{once:true});
       timer=setTimeout(cancel,timeout);
       try{
@@ -18,6 +18,7 @@ export function modelAdapter({apiKey=process.env.GEMINI_API_KEY,model=process.en
         worker=workerFactory({workerData:{apiKey,model,input:structuredClone(input)},stdout:true,stderr:true});
         worker.stdout?.resume();worker.stderr?.resume();
         worker.on('message',message=>{
+          if(['connecting','waiting_response','generating','correcting','validating'].includes(message.progress)){stage=message.progress;return;}
           if(message.error){const error=new ModelError(errors.has(message.error)?message.error:'NETWORK_ERROR');if(message.formatReason==='MISSING_TOOL_CALL')error.formatReason='MISSING_TOOL_CALL';finish(error);return;}
           try{finish(null,{decision:parseDecision(message.result?.decision,input),model,tokens:Number.isFinite(message.result?.tokens)?message.result.tokens:null});}
           catch{finish(new ModelError('FORMAT_ERROR'));}

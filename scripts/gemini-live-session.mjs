@@ -14,8 +14,8 @@ export function liveCloseError(event){
   return safeModelError(event);
 }
 /** One short Live session per decision, never shared between players. Called in a disposable worker. */
-export function liveDecision(client,model,input,signal){
-  try{input=withStrategy(input);}catch(e){return Promise.reject(e);}
+export function liveDecision(client,model,input,signal,{prepare=withStrategy,onProgress=()=>{}}={}){
+  try{input=prepare(input);}catch(e){return Promise.reject(e);}
   return new Promise((resolve,reject)=>{
     let session,settled=false,tokens=null,repairs=0;
     const close=()=>{try{session?.close();}catch{/* No provider payload in logs. */}};
@@ -26,10 +26,12 @@ export function liveDecision(client,model,input,signal){
     const callbacks={
       onmessage(message){
         if(settled)return;
+        onProgress('generating');
         try{
           if(Number.isFinite(message.usageMetadata?.totalTokenCount))tokens=message.usageMetadata.totalTokenCount;
           if(message.toolCallCancellation||message.goAway||message.serverContent?.interrupted){finish(new ModelError('NETWORK_ERROR'));return;}
           if(message.toolCall){
+            onProgress('validating');
             const calls=message.toolCall.functionCalls;
             if(!Array.isArray(calls)||calls.length!==1||calls[0].name!=='submit_decision')throw new ModelError('FORMAT_ERROR');
             const call=calls[0];
@@ -42,6 +44,7 @@ export function liveDecision(client,model,input,signal){
           // Audio, transcripts and thinking are intentionally never used as game data.
           if(message.serverContent?.turnComplete){
             if(repairs++===0&&session){
+              onProgress('correcting');
               // Same private session, one bounded correction; never interpret prose as a vote.
               session.sendClientContent({turns:[{role:'user',parts:[{text:'上一轮没有收到submit_decision工具调用，任何口头赞同都未执行。请现在只调用submit_decision一次。'+(input.kind==='action'?'choice必须是已提供choices的合法整数下标，memory是策略补丁；不要speech字段。':'choice固定0，speech为公开发言，memory为策略补丁。')+'不要复述要求，不输出音频回答，不修改其他玩家信息。'}]}],turnComplete:true});
             }else{const error=new ModelError('FORMAT_ERROR');error.formatReason='MISSING_TOOL_CALL';finish(error);}
@@ -51,11 +54,12 @@ export function liveDecision(client,model,input,signal){
       onerror:e=>finish(liveCloseError(e)),
       onclose:e=>finish(liveCloseError(e)),
     };
+    onProgress('connecting');
     Promise.resolve().then(()=>client.live.connect({model,callbacks,config:{
       responseModalities:['AUDIO'],maxOutputTokens:4096,systemInstruction:input.strategy.text.replaceAll('返回单个 JSON 对象，只有choice、speech、memory。','使用submit_decision工具提交，字段以本次工具定义为准。')+' 只调用一次submit_decision工具；不要口头回答。'+(input.kind==='action'?' 本次是行动轮：只提交choice和memory；不提交speech，不发言或解释。':' 本次是发言轮：choice必须为0，speech是简短公开发言。'),
       tools:[{functionDeclarations:[{name:'submit_decision',description:'提交本玩家当前轮唯一决策，游戏服务器仍会校验。',behavior:'BLOCKING',parameters:{type:'OBJECT',properties:{choice:{type:'INTEGER',minimum:0,maximum:input.kind==='action'?input.choices.length-1:0,format:'enum',enum:input.kind==='action'?input.choices.map((_,i)=>String(i)):['0'],description:'只填choices的合法数字下标；发言轮固定0。'},...(input.kind==='speech'?{speech:{type:'STRING',maxLength:'500',description:'简短公开中文发言，不超过500字。'}}:{}),memory:liveSchema(memorySchema)},required:input.kind==='action'?['choice','memory']:['choice','speech','memory']}}]}],
     }})).then(connected=>{
-      session=connected;if(settled){close();return;}
+      session=connected;onProgress('waiting_response');if(settled){close();return;}
       session.sendClientContent({turns:[{role:'user',parts:[{text:JSON.stringify(modelPayload(input))}]}],turnComplete:true});
     }).catch(e=>finish(safeModelError(e)));
   });
