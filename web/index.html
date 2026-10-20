@@ -3,12 +3,12 @@
 <body><main class="app-shell">
 <header class="topbar"><div class="brand"><button id="identity-toggle" class="icon-button identity-toggle" aria-label="查看我的身份" title="查看我的身份" aria-haspopup="dialog" hidden></button><h1>阿瓦隆</h1><span class="spark">✦</span></div><div class="top-actions"><span id="mode-badge">本地练习</span><button id="settings" class="icon-button" aria-label="设置与规则"></button></div></header>
 <div class="screen-layout"><section class="game-screen" aria-label="阿瓦隆对局">
-<div class="record-entries"><button id="history-entry" class="history-entry" type="button">投票历史 ›</button><button id="chat-history-entry" class="history-entry" type="button" hidden>聊天记录 ›</button></div>
-<nav id="quest-track" class="quest-track" aria-label="五次任务历史"></nav>
+<div class="record-entries"><button id="chat-history-entry" class="history-entry" type="button" hidden>聊天记录 ›</button></div>
+<div id="result-notice" class="result-notice" role="status" hidden></div><nav id="quest-track" class="quest-track" aria-label="五次任务历史"></nav>
 <div class="round-heading"><h2 id="round-title">正在连接圆桌…</h2><p id="round-detail"></p></div>
 <section id="stage-screen" class="stage-screen" aria-live="polite" hidden></section>
 <div id="arena" class="arena"><div id="orbit" class="orbit"></div><div id="disc" class="disc"><div id="disc-icon"></div><h3 id="phase-title"></h3><p id="phase-count"></p></div><div id="seats"></div></div>
-<p class="identity-hint" id="identity-hint"></p>
-</section><aside class="desktop-panel"><p class="eyebrow">轻舟 · 阿瓦隆</p><h2>每一次选择，<br>都留下线索。</h2><p>头像只代表座位。<br>身份藏在每个人自己的视角里。</p><div class="side-score"><span>成功任务 <b id="good-score">0</b></span><span>失败任务 <b id="evil-score">0</b></span></div><div id="latest-public"></div><p class="scope">本地单人练习 / 脚本演示<br>支持八种角色，尚非多人房间。</p></aside></div>
+<section id="team-status" class="team-status"></section><p class="identity-hint" id="identity-hint"></p>
+</section><aside class="desktop-panel"><h2>本局聊天</h2><p id="desktop-chat-status"></p><ol id="desktop-chat-log" class="discussion-log"></ol><div class="side-score"><span>成功任务 <b id="good-score">0</b></span><span>失败任务 <b id="evil-score">0</b></span></div><div id="latest-public"></div><p class="scope"></p></aside></div>
 <footer><span id="session-label"></span><span>5–10 人 · 八种角色</span></footer>
-</main><section id="action-dock" class="action-dock" aria-label="固定操作区"><div class="dock-inner"><div id="notice" class="notice" role="status" aria-live="polite"></div><p id="action-help" class="action-help" aria-live="polite"></p><section id="actions" class="actions" aria-label="当前阶段操作"></section><p id="error" role="alert" hidden></p></div></section><dialog id="panel" aria-labelledby="panel-title"><header class="panel-header"><h2 id="panel-title"></h2><button id="close-panel" class="icon-button" aria-label="关闭面板"></button></header><div id="panel-body"></div></dialog></body></html>
+</main><section id="action-dock" class="action-dock" aria-label="固定操作区"><div class="dock-inner"><div id="notice" class="notice" role="status" aria-live="polite"></div><p id="action-help" class="action-help" aria-live="polite"></p><section id="actions" class="actions" aria-label="当前阶段操作"></section><p id="error" role="alert" hidden></p></div></section><dialog id="panel" aria-labelledby="panel-title"><header class="panel-header"><button id="back-settings" hidden>‹ 返回设置</button><h2 id="panel-title"></h2><button id="close-panel" class="icon-button" aria-label="关闭面板"></button></header><div id="panel-body"></div></dialog></body></html>

@@ -1,10 +1,10 @@
-import { createGame, applyAction, getPlayerView, getPublicView, getRules, getRecommendedRoles, validateConfig } from './index.ts';
+import { createGame, applyAction, getPlayerView, getPublicView, getRules, getRecommendedRoles, validateConfig, alignmentOf } from './index.ts';
 import type { Game, ResolvedConfig, Action } from './types.ts';
 
 export type RoomStatus = 'lobby' | 'revealing' | 'playing' | 'finished' | 'terminated';
 export interface Member { id:string; session:string; name:string; seat:number|null; ready:boolean; confirmed:boolean; kind?:'ai'; aiProfile?:string }
 /** Stored only on server; never serialize Room directly. */
-export interface Speech { playerId:string; text:string; turnId:string }
+export interface Speech { playerId:string; text:string; turnId:string; phase?:string; questNumber?:number }
 export interface Discussion { roundId:string; order:string[]; cursor:number }
 export interface Room {
   code:string; config:ResolvedConfig; configVersion:number; revision:number; hostId:string;
@@ -60,12 +60,19 @@ export function changeRoom(room:Room,session:string,input:Record<string,unknown>
       if(!target)fail('INVALID_TARGET');
       r.members=r.members.filter(p=>p.id!==target!.id);r.members.filter(p=>p.kind!=='ai').forEach(p=>p.ready=false);break;
     }
+    case 'chat': {
+      fields(input,['requestId','type','text']);
+      if(r.status!=='playing'||!r.game||(r.game.phase==='assassination'&&alignmentOf(r.game.roles.find(p=>p.playerId===member.id)!.role)!=='evil')||member.kind==='ai')fail('NOT_YOUR_TURN');
+      if(typeof input.text!=='string'||!input.text.trim()||input.text.length>500||/[\x00-\x08\x0b-\x1f\x7f]/.test(input.text))fail('INVALID_SPEECH');
+      (r.messages??=[]).push({playerId:member.id,text:(input.text as string).trim(),turnId:`chat:${input.requestId}`,phase:r.game!.phase,questNumber:r.game!.questNumber});break;
+    }
     case 'speak': {
       fields(input,['requestId','type','turnId','text']);
       const d=r.discussion;
-      if(r.status!=='playing'||!d||d.order[d.cursor]!==member.id||input.turnId!==`${d.roundId}:${d.cursor}`)fail('NOT_YOUR_TURN');
+      const free=r.game?.phase==='assassination'&&alignmentOf(r.game.roles.find(p=>p.playerId===member.id)!.role)==='evil'&&input.turnId===`${roundId(r.game)}:free:${member.id}`;
+      if(!free&&(r.status!=='playing'||!d||d.order[d.cursor]!==member.id||input.turnId!==`${d.roundId}:${d.cursor}`)||r.status!=='playing'||(r.game?.phase==='assassination'&&!free))fail('NOT_YOUR_TURN');
       if(typeof input.text!=='string'||input.text.length>500||/[\x00-\x08\x0b-\x1f\x7f]/.test(input.text))fail('INVALID_SPEECH');
-      (r.messages??=[]).push({playerId:member.id,text:(input.text as string).trim(),turnId:String(input.turnId)});d!.cursor++;break;
+      (r.messages??=[]).push({playerId:member.id,text:(input.text as string).trim(),turnId:String(input.turnId),...(r.game?{phase:r.game.phase,questNumber:r.game.questNumber}:{})});if(!free)d!.cursor++;break;
     }
 
     case 'seat':
@@ -104,7 +111,7 @@ export function changeRoom(room:Room,session:string,input:Record<string,unknown>
     case 'action': {
       fields(input,['requestId','type','roundId','action']);
       if(r.status!=='playing'||!r.game)fail('NOT_PLAYING');
-      if(r.discussion&&r.discussion.cursor<r.discussion.order.length)fail('DISCUSSION_PENDING');
+      if(r.game!.phase!=='assassination'&&r.discussion&&r.discussion.cursor<r.discussion.order.length)fail('DISCUSSION_PENDING');
       const game=r.game!;const action=record(input.action);
       if(action.requestId!==input.requestId||input.roundId!==roundId(game))fail('STALE_ROUND');
       // Rebase only simultaneous submissions within this exact public phase/round.
@@ -134,9 +141,9 @@ export function changeRoom(room:Room,session:string,input:Record<string,unknown>
       r.status='terminated';r.closedAt=now;break;
     default:fail('INVALID_REQUEST');
   }
-  if(r.status==='playing'&&r.game?.phase==='proposal'&&r.members.some(p=>p.kind==='ai')&&r.discussion?.roundId!==roundId(r.game)){
+  if(r.status==='playing'&&r.game&&(r.game.phase==='proposal'&&r.members.some(p=>p.kind==='ai'))&&r.discussion?.roundId!==roundId(r.game)){
     const {players,leaderIndex}=r.game;
-    const order=[...players.slice(leaderIndex),...players.slice(0,leaderIndex)].map(p=>p.id);
+    const order=[...players.slice(leaderIndex),...players.slice(0,leaderIndex)].map(p=>p.id).filter(id=>r.game!.phase!=='assassination'||r.game!.roles.some(role=>role.playerId===id&&alignmentOf(role.role)==='evil'));
     r.discussion={roundId:roundId(r.game),order,cursor:0};
   }
   return r;
@@ -146,7 +153,7 @@ export function roomSnapshot(r:Room,session:string|null,now:number,online:(sessi
   if(session&&!mine)fail('ROOM_ACCESS_DENIED');
   const visible=r.game&&r.status!=='terminated'&&(r.status!=='revealing'||now>=r.revealAt!);
   const player=visible&&mine?getPlayerView(r.game!,mine.id):null;
-  const discussing=!!r.discussion&&r.discussion.cursor<r.discussion.order.length;
+  const discussing=r.game?.phase!=='assassination'&&!!r.discussion&&r.discussion.cursor<r.discussion.order.length;
   if(player&&(r.status!=='playing'||discussing))player.legalActions=[];
   const view=r.game&&r.status!=='terminated'?getPublicView(r.game):null;
   // No accurate assassin identity in public waiting lists.
@@ -156,7 +163,7 @@ export function roomSnapshot(r:Room,session:string|null,now:number,online:(sessi
     code:r.code,status:r.status,config:r.config,configVersion:r.configVersion,hostId:r.hostId,revealAt:r.revealAt,
     members:r.members.map(p=>({id:p.id,name:p.name,seat:p.seat,ready:p.ready,confirmed:p.confirmed,online:p.kind==='ai'||online(p.session),kind:p.kind??'human',...(p.kind==='ai'?{aiProfile:p.aiProfile??'gemini'}:{})})),
     selfId:mine?.id??null,waitingIds:discussing?[r.discussion!.order[r.discussion!.cursor]]:waiting,
-    discussion:r.discussion?{active:discussing,speakerId:r.discussion.order[r.discussion.cursor]??null,turnId:`${r.discussion.roundId}:${r.discussion.cursor}`} : null,
+    discussion:r.game?.phase==='assassination'?null:r.discussion?{active:discussing,speakerId:r.discussion.order[r.discussion.cursor]??null,turnId:`${r.discussion.roundId}:${r.discussion.cursor}`,participants:r.discussion.order.map((id,i)=>{const message=r.messages?.find(m=>m.turnId===`${r.discussion!.roundId}:${i}`);return {playerId:id,status:i<r.discussion!.cursor?(message?.text?'spoken':'skipped'):i===r.discussion!.cursor?(r.aiProblem&&r.members.find(p=>p.id===id)?.kind==='ai'?'failed':'waiting'):'pending'};})} : null,
     messages:r.messages??[],aiProblem:r.aiProblem??null,
   },rules:getRules(r.config.playerCount),configOptions:configOptions(),view,player,roundId:r.game?roundId(r.game):null};
 }

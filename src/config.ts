@@ -28,7 +28,8 @@ export function alignmentOf(role: Role): Alignment {
 export function validateConfig(value: unknown): ResolvedConfig {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new RuleError('INVALID_CONFIG');
   const c = value as Record<string, unknown>;
-  if (Object.keys(c).some(k => !['playerCount','roleSet','roles'].includes(k)) || typeof c.playerCount !== 'number') throw new RuleError('INVALID_CONFIG');
+  if (Object.keys(c).some(k => !['playerCount','roleSet','roles','rejectionMode'].includes(k)) || typeof c.playerCount !== 'number') throw new RuleError('INVALID_CONFIG');
+  if(c.rejectionMode!==undefined&&!['consecutive','cumulative'].includes(c.rejectionMode as string))throw new RuleError('INVALID_CONFIG');
   const r = getRules(c.playerCount);
   const roleSet = c.roleSet === undefined ? (c.roles === undefined ? 'base' : 'custom') : c.roleSet;
   if (typeof roleSet !== 'string' || !['base','recommended','custom'].includes(roleSet)) throw new RuleError('INVALID_CONFIG');
@@ -41,7 +42,7 @@ export function validateConfig(value: unknown): ResolvedConfig {
       deck.filter(x => x === 'merlin').length !== 1 || deck.filter(x => x === 'assassin').length !== 1 ||
       ROLE_ORDER.filter(x => x !== 'loyal' && x !== 'minion').some(x => deck.filter(y => y === x).length > 1)) throw new RuleError('INVALID_CONFIG');
   // Canonical public deck order never mirrors the secret assignment/shuffle.
-  return { playerCount:r.playerCount, roleSet:roleSet as ResolvedConfig['roleSet'], roles: [...deck].sort((a,b)=>ROLE_ORDER.indexOf(a)-ROLE_ORDER.indexOf(b)) };
+  return { playerCount:r.playerCount, roleSet:roleSet as ResolvedConfig['roleSet'], roles: [...deck].sort((a,b)=>ROLE_ORDER.indexOf(a)-ROLE_ORDER.indexOf(b)), ...(c.rejectionMode==='cumulative'?{rejectionMode:'cumulative' as const}:{}) };
 }
 
 /** Build from selected special roles, filling ordinary roles. Merlin/Assassin are mandatory in this product mode. */

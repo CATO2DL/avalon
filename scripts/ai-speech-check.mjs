@@ -13,8 +13,8 @@ else{
   const messages=name==='merlin-opening'?[]:[{playerId:other,text:'首轮任务成功，原车全是正义，继续原车就稳了。',turnId:'synthetic-claim'}];
   const input=modelInput(getPlayerView(g,actor),messages,'','speech','speech-evaluation');const start=Date.now();
   try{const r=await adapter.decide(input,AbortSignal.timeout(30000));report.cases.push({name,status:'valid',speech:r.decision.speech,elapsedMs:Date.now()-start,tokens:r.tokens});}
-  catch(e){report.cases.push({name,status:'failed',code:/^[A-Z_]+$/.test(e.message)?e.message:'CHECK_FAILED'});process.exitCode=1;}
+  catch(e){report.cases.push({name,status:'failed',code:/^[A-Z_]+$/.test(e.message)?e.message:'CHECK_FAILED',...(e.formatReason==='MISSING_TOOL_CALL'?{formatReason:e.formatReason}:{})});process.exitCode=1;}
  }
  await mkdir(new URL('../.local/ai/',import.meta.url),{recursive:true});await writeFile(new URL('../.local/ai/speech-evaluation.json',import.meta.url),JSON.stringify(report,null,2),{mode:0o600});
- console.log(JSON.stringify(report.cases.map(({name,status,code,elapsedMs})=>({name,status,code,elapsedMs}))));
+ console.log(JSON.stringify(report.cases.map(({name,status,code,formatReason,elapsedMs})=>({name,status,code,formatReason,elapsedMs}))));
 }

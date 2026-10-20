@@ -63,13 +63,15 @@ export class AIRuntime {
   task(room,actor){
     if(room.status!=='playing'||!room.game)return null;
     const view=getPlayerView(room.game,actor.id),d=room.discussion;
-    const speaking=d&&d.cursor<d.order.length;
-    if(speaking&&d.order[d.cursor]!==actor.id)return null;
+    const free=view.public.phase==='assassination';
+    const freeSpeech=free&&view.self.alignment==='evil'&&!view.legalActions.length&&!(room.messages??[]).some(m=>m.playerId===actor.id&&m.phase==='assassination');
+    const speaking=free?freeSpeech:d&&d.cursor<d.order.length;
+    if(speaking&&!free&&d.order[d.cursor]!==actor.id)return null;
     if(!speaking&&!view.legalActions.length)return null;
-    const kind=speaking?'speech':'action',turn=speaking?`${d.roundId}:${d.cursor}`:roundId(room.game);
+    const kind=speaking?'speech':'action',turn=speaking?(free?`${roundId(room.game)}:free:${actor.id}`:`${d.roundId}:${d.cursor}`):roundId(room.game);
     if(speaking)view.legalActions=[];
     const memory=this.db.prepare('SELECT memory FROM ai_memory WHERE game=? AND actor=?').get(room.game.id,actor.id)?.memory??'';
-    return {id:digest(`${room.game.id}:${actor.id}:${kind}:${turn}`),code:room.code,game:room.game.id,actor:actor.id,turn,input:modelInput(view,room.messages??[],memory,kind,room.code,d?{order:d.order,cursor:d.cursor,turnId:turn}:null)};
+    return {id:digest(`${room.game.id}:${actor.id}:${kind}:${turn}`),code:room.code,game:room.game.id,actor:actor.id,turn,input:modelInput(view,room.messages??[],memory,kind,room.code,!free&&d?{order:d.order,cursor:d.cursor,turnId:turn}:null)};
   }
   async tick(){
     if(this.busy||this.closed||!this.adapter)return;this.busy=true;
@@ -78,7 +80,7 @@ export class AIRuntime {
         const initial=JSON.parse(row.data);
         if(!['revealing','playing'].includes(initial.status))continue;
         // Pause this room on an unresolved failure; another AI must not clear the error.
-        if(this.db.prepare("SELECT 1 FROM ai_jobs WHERE code=? AND status='failed' LIMIT 1").get(initial.code))continue;
+        if(initial.game?.phase!=='assassination'&&this.db.prepare("SELECT 1 FROM ai_jobs WHERE code=? AND status='failed' LIMIT 1").get(initial.code))continue;
         const delayed=this.db.prepare("SELECT actor FROM ai_jobs WHERE code=? AND status='queued' AND error='RATE_LIMIT' LIMIT 1").get(initial.code);
         const actors=initial.members.filter(p=>p.kind==='ai'&&(!delayed||p.id===delayed.actor));
         for(const selected of actors){

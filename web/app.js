@@ -4,8 +4,10 @@ import { ringLayout } from './layout.js';
 import { taskHistory } from './history.js';
 const requestId=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
 const isMultiplayer=document.body.dataset.multiplayer==='true';
-let multiplayer;
+let multiplayer,settingsBranch=false,resultGame=null,resultSequence=0,resultTimer;
+
 const $ = id => document.getElementById(id);
+$('back-settings').addEventListener('click',()=>settings());
 const phaseNames = { proposal:'组建队伍', voting:'队伍投票', quest:'执行任务', assassination:'刺杀时刻', ended:'对局结束' };
 const outcomes = { three_failed_quests:'三次任务失败，邪恶获胜。', five_rejections:'连续五次否决，邪恶获胜。', merlin_assassinated:'刺杀命中梅林，邪恶逆转获胜。', assassination_missed:'刺杀未命中梅林，正义获胜。' };
 let state, me = null, busy = false, playing = false, timer, selection = [], selectionKey = '', panelKind = '', lastFocus, stageKey='';
@@ -14,9 +16,10 @@ const playerName = id => state?.view.players.find(p => p.id === id)?.name ?? '�
 const legal = () => me?.legalActions[0];
 $('chat-history-entry').hidden=!isMultiplayer;
 $('chat-history-entry').addEventListener('click',()=>multiplayer?.chatHistory());
-$('history-entry').addEventListener('click',()=>showHistory(state?.view?.questNumber??1));
 function pause() { playing = false; clearTimeout(timer); }
 function openPanel(title, kind, content) {
+  if(['settings','room-settings'].includes(kind))settingsBranch=true;else if(!['rules','catalogue','room-config','invite','terminate'].includes(kind))settingsBranch=false;
+  $('back-settings').hidden=!settingsBranch||['settings','room-settings'].includes(kind);
   pause(); renderActions(); lastFocus = document.activeElement;
   panelKind = kind; $('panel').dataset.kind=kind; $('panel-title').textContent = title; $('panel-body').replaceChildren(content);
   if (!$('panel').open) $('panel').showModal();
@@ -25,7 +28,7 @@ function openPanel(title, kind, content) {
 }
 function closePanel() { $('panel').close(); }
 $('close-panel').addEventListener('click', closePanel);
-$('panel').addEventListener('close', () => { panelKind = ''; $('panel-body').replaceChildren(); lastFocus?.focus(); });
+$('panel').addEventListener('close', () => { panelKind = ''; settingsBranch=false; $('panel-body').replaceChildren(); lastFocus?.focus(); });
 $('panel').addEventListener('click', e => { if (e.target === $('panel')) { const r=$('panel').getBoundingClientRect(); if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom) closePanel(); } });
 
 function portrait(role) {
@@ -65,14 +68,15 @@ function roleContent(id, personal = false) {
     }
     wrap.append(knowledge);
   }
-  wrap.append(portrait(role),el('h3','','技能说明'),el('p','',role.skill),el('h3','','技能解析'),el('p','',role.analysis));
+  wrap.append(portrait(role),el('h3','','你的目标'),el('p','',role.goal),el('h3','','能力与限制'),el('p','',role.limit),el('h3','','技能说明'),el('p','',role.skill),el('h3','','技能解析'),el('p','',role.analysis));
   if(!role.playable) wrap.append(el('p','panel-note','插画已接收；该扩展角色尚未加入当前规则内核与练习配置。'));
   return wrap;
 }
+function identityContent(){const body=roleContent(me.self.role,true);if(isMultiplayer&&state?.room.status==='revealing'){const member=state.room.members.find(p=>p.id===state.room.selfId);if(!member?.confirmed)body.append(button('我已了解，确认身份',()=>multiplayer.confirmIdentity(),'primary identity-confirm'));}return body;}
 function showIdentity() {
   if(!me)return;
   multiplayer?.openIdentity();
-  openPanel('你的身份','identity',roleContent(me.self.role,true));
+  openPanel('你的身份','identity',identityContent());
 }
 function showHistory(n) {
   const v=state.view, body=el('div');
@@ -105,7 +109,7 @@ function showHistory(n) {
     }
     body.append(node);
   });
-  if(v.outcome?.reason==='five_rejections'&&n===v.questNumber)body.append(el('p','knowledge',outcomes.five_rejections));
+  if(v.outcome?.reason==='five_rejections'&&n===v.questNumber)body.append(el('p','knowledge',v.config.rejectionMode==='cumulative'?'累计五次组队否决，邪恶获胜。':outcomes.five_rejections));
   const tabs=el('nav','history-tabs');
   for(let q=1;q<=5;q++){const b=button(`任务 ${q}`,()=>showHistory(q),q===n?'primary':'');b.setAttribute('aria-pressed',String(q===n));tabs.append(b);}
   body.prepend(tabs);
@@ -153,7 +157,9 @@ function settings() {
 function rulesPanel(){
   const body=el('div','role-description');
   for(const [h,t] of [
-    ['组队与投票','队长选择规定人数，所有玩家投票。超过半数赞成才通过，平票否决。连续五次否决，邪恶获胜。'],
+    ['组队与投票','队长选好规定人数，所有玩家投票。超过半数赞成才通过，平票也算否决。无论队伍通过还是被否决，下一次组队都由下一座队长负责。'],
+    ['否决计数','默认连续五次组队否决，邪恶获胜；队伍通过后清零。若大厅选择累计家规，则通过也不清零，本局累计五次否决即邪恶获胜。否决只是没上车，不算任务失败。'],
+    ['刺杀讨论','三次任务成功后，邪恶玩家（含奥伯伦）可以自由发言，正义可看不能说；刺客随时可以选择目标并刺杀，无需等讨论。'],
     ['执行任务','正义阵营只能选择成功，邪恶可选择成功或失败。所有队员提交后只公开匿名汇总。7–10人的第4次任务需要两张失败，其余任务一张失败即可。'],
     ['胜负与刺杀','三次任务失败，邪恶获胜；三次任务成功，进入刺杀。刺客命中梅林则邪恶获胜，否则正义获胜。'],
     ['刺杀亮牌（房规）','仅在刺杀阶段，正义玩家可查看全员角色，邪恶玩家可查看所有邪恶队友角色（含奥伯伦）；奥伯伦也可查看邪恶队友。终局后全员公开。'],
@@ -169,7 +175,7 @@ function catalogue(){
     const art=portrait(role);art.classList.add('catalogue-art');
     const text=el('div','catalogue-copy'),header=el('div','catalogue-heading');
     header.append(el('h3','',role.name),el('span',role.alignment==='正义'?'alignment-good':'alignment-evil',role.alignment));
-    text.append(header,el('p','catalogue-skill',role.skill),el('p','catalogue-analysis',role.analysis));
+    text.append(header,el('p','catalogue-goal',role.goal),el('p','catalogue-skill',role.skill),el('p','catalogue-analysis',role.limit),el('p','catalogue-analysis',role.analysis));
     card.append(art,text);grid.append(card);
   }
   openPanel('角色图鉴','catalogue',grid);
@@ -198,7 +204,7 @@ function render() {
     if(result){const mark=el('span','quest-result');mark.append(icon(result.succeeded?'check':'close'));b.append(mark);}return b;
   }));
   $('round-title').replaceChildren('第 ',el('b','',String(v.questNumber)),' 轮 · 需要 ',el('b','',String(v.teamSize)),' 人');
-  $('round-detail').textContent=`连续流局 ${v.rejectionCount} / 5 · ${v.score.good} 成功 / ${v.score.evil} 失败`;
+  $('round-detail').textContent=`${v.config.rejectionMode==='cumulative'?'累计否决（家规）':'连续否决'} ${v.rejectionCount} / 5 · ${v.score.good} 成功 / ${v.score.evil} 失败`;
   $('phase-title').textContent=v.outcome?(v.outcome.winner==='good'?'正义获胜':'邪恶获胜'):phaseNames[v.phase];
   $('phase-count').textContent=v.phase==='proposal'?`${selection.length} / ${v.teamSize}`:v.phase==='voting'?`${v.submissions.votes} / ${v.players.length}`:v.phase==='quest'?`${v.submissions.questCards} / ${v.teamSize}`:v.phase==='assassination'?'最后一剑':`${v.score.good} : ${v.score.evil}`;
   $('good-score').textContent=v.score.good;$('evil-score').textContent=v.score.evil;
@@ -206,7 +212,7 @@ function render() {
   $('notice').textContent=v.outcome?'':v.phase==='proposal'?`${v.rejectionCount?'上队被否决 · ':''}${playerName(v.leaderId)} 开车，选择 ${v.teamSize} 人出发`:
     v.phase==='voting'?`队伍投票 ${v.submissions.votes} / ${v.players.length}`:v.phase==='quest'?`任务出牌 ${v.submissions.questCards} / ${v.teamSize}`:legal()?.type==='assassinate'?'选出梅林':'等待刺客选择';
   const last=v.quests.at(-1);$('latest-public').textContent=last?`最近任务：第 ${last.questNumber} 次${last.succeeded?'成功':'失败'}，${last.successCount} 张成功 / ${last.failCount} 张失败。`:'暂无任务结果。点击上方任务节点，查看每次提案与投票。';
-  renderSeats();renderStage();renderActions();
+  renderSeats();renderStage();renderActions();renderTeamStatus();renderResult();
 }
 function renderSeats(){
   if(!state?.view||['assassination','ended'].includes(state.view.phase)){$('seats').replaceChildren();return;}
@@ -233,13 +239,25 @@ function renderSeats(){
     face.setAttribute('aria-label',picking?`${chosen?'取消选择':'选择'}${p.name}`:`${p.name} 中立头像`);
     if(picking)face.setAttribute('aria-pressed',String(chosen));
     face.style.width=face.style.height=`${layout.avatar}px`;face.append(avatar(i),el('span','seat-number',String(i+1)));
-    if(p.id===v.leaderId){const crown=el('span','leader-icon');crown.title='队长';crown.append(icon('crown'));face.append(crown);}
+    if(p.id===v.leaderId){const crown=el('span','leader-icon');crown.title='队长';crown.append(icon('crown'),el('small','','队长'));face.append(crown);}
     seat.append(face,el('span','seat-name',p.id===mine?`${i+1}号 · 你`:p.name+(isMultiplayer&&!state.room.members.find(m=>m.id===p.id)?.online?' · 离线':'')));
     if(picking&&chosen){const mark=el('span','selection-mark');mark.append(icon('check'));mark.setAttribute('aria-hidden','true');face.append(mark);}
     const ballot=!picking&&showVote?vote.votes.find(b=>b.playerId===p.id):null;
-    seat.append(el('span',`seat-label${ballot?' vote-label':''}`,ballot?(ballot.vote==='approve'?'✓ 赞成':'× 反对'):(chosen?(action?.type==='assassinate'?'刺杀目标':picking?'已选上车':'远征成员'):'')));
+    seat.append(el('span',`seat-label${ballot?' vote-label '+(ballot.vote==='approve'?'approve':'reject'):''}`,ballot?(ballot.vote==='approve'?'✓ 赞成':'× 反对'):(chosen?(action?.type==='assassinate'?'刺杀目标':'已入选'):'')));
     return seat;
   }));
+}
+function renderTeamStatus(){const v=state.view,box=$('team-status');box.replaceChildren();if(['ended','assassination'].includes(v.phase)){box.hidden=true;return;}box.hidden=false;
+ const seat=id=>v.players.findIndex(p=>p.id===id)+1,team=legal()?.type==='propose_team'?selection:v.team;
+ box.append(el('strong','captain-title',`♛ 当前队长：${seat(v.leaderId)}号 · ${playerName(v.leaderId)}`));
+ box.append(el('p','team-list',`已选 ${team.length}/${v.teamSize} 人 · ${team.length?team.map(id=>`${seat(id)}号 ${playerName(id)}`).join('、'):'等待选队'}`));
+ if(['voting','quest'].includes(v.phase)){const voting=v.phase==='voting',submitted=v.submissionPlayers?.[voting?'votes':'quests']??[],eligible=voting?v.players:v.players.filter(p=>v.team.includes(p.id));
+ box.append(el('strong','',`${voting?'投票':'任务出牌'}进度 ${submitted.length}/${eligible.length}`));const list=el('div','submission-list');for(const p of eligible)list.append(el('span',submitted.includes(p.id)?'submitted':'waiting',`${seat(p.id)}号 · ${submitted.includes(p.id)?(voting?'已投票':'已出牌'):(voting?'未投票':'未出牌')}`));box.append(list);}
+}
+function renderResult(){const v=state.view,latest=v.events.at(-1)?.sequence??0,box=$('result-notice');if(resultGame!==v.gameId){resultGame=v.gameId;resultSequence=latest;box.hidden=true;clearTimeout(resultTimer);return;}
+ const events=v.events.filter(e=>e.sequence>resultSequence&&['team_vote_resolved','quest_resolved'].includes(e.type));resultSequence=latest;if(!events.length)return;box.replaceChildren();
+ for(const e of events){const row=el('div');if(e.type==='team_vote_resolved'){const yes=e.votes.filter(v=>v.vote==='approve').length;row.append(el('strong',e.approved?'approve':'reject',e.approved?'队伍通过':'队伍否决 · 未执行任务'),el('span','',` ${yes} 赞成 / ${e.votes.length-yes} 反对`));}else row.append(el('strong',e.succeeded?'approve':'reject',e.succeeded?'任务成功':'任务失败'),el('span','',` ${e.successCount} 成功牌 / ${e.failCount} 失败牌`));row.append(button('查看详情',()=>showHistory(e.questNumber)));box.append(row);}
+ box.hidden=false;clearTimeout(resultTimer);resultTimer=setTimeout(()=>box.hidden=true,6500);
 }
 function renderStage(){
   const v=state.view, box=$('stage-screen');
@@ -269,7 +287,7 @@ function renderStage(){
     });box.append(grid);
   }else{
     const won=me?me.self.alignment===v.outcome.winner:null;
-    hero.append(el('h2','',won===null?(v.outcome.winner==='good'?'正义胜利':'邪恶胜利'):won?'你胜利了':'你失败了'),el('p','',outcomes[v.outcome.reason]));
+    hero.append(el('h2','',won===null?(v.outcome.winner==='good'?'正义胜利':'邪恶胜利'):won?'你胜利了':'你失败了'),el('p','',v.outcome.reason==='five_rejections'&&v.config.rejectionMode==='cumulative'?'累计五次组队否决，邪恶获胜。':outcomes[v.outcome.reason]));
     const assassination=v.events.findLast(e=>e.type==='assassination_resolved');
     if(assassination){
       const target=v.players.find(p=>p.id===assassination.targetId),role=v.revealedRoles?.find(r=>r.playerId===assassination.targetId);
@@ -291,10 +309,11 @@ function renderActions(){
   const box=$('actions');box.replaceChildren();const v=state.view,a=legal();
   $('action-help').textContent='';
   const add=(text,fn,cls='',disabled=false)=>{const b=button(text,fn,cls);b.disabled=busy||disabled;box.append(b);};
-  if(isMultiplayer&&state.room.discussion?.active){
+  if(isMultiplayer&&v.phase!=='assassination'&&state.room.discussion?.active){
     const own=state.room.discussion.speakerId===state.room.selfId;
     $('action-help').textContent=state.room.aiProblem?multiplayer.aiMessage(state.room.aiProblem):own?'轮到你发言':`等待 ${playerName(state.room.discussion.speakerId)} 发言`;
-    add(own?'发言 / 跳过':'查看讨论',()=>multiplayer.discussion(),'primary');add('房间设置',settings);return;
+    if(own)add('发言 / 跳过',()=>multiplayer.discussion(),'primary');
+    return;
   }
   if(isMultiplayer&&state.room.aiProblem)$('action-help').textContent=multiplayer.aiMessage(state.room.aiProblem);
   if(v.phase==='ended'){const host=!isMultiplayer||state.room.selfId===state.room.hostId;add(host?'再来一局':'等待房主再来一局',isMultiplayer?()=>multiplayer.rematch():settings,'primary',!host);add('查看任务记录',()=>showHistory(v.questNumber));return;}
@@ -309,7 +328,7 @@ function renderActions(){
   if(isMultiplayer){
     const waiting=state.room.waitingIds.map(playerName);
     $('action-help').textContent=state.room.aiProblem?multiplayer.aiMessage(state.room.aiProblem):waiting.length?`等待 ${waiting.join('、')}`:v.phase==='assassination'?'等待刺客行动':'等待其他玩家';
-    add('等待同步',()=>{},'primary',true);add('房间设置',settings);return;
+    return;
   }
   add(state.mode==='practice'?'推进其他玩家':'下一步',step,'primary',playing);
   const play=button(playing?'暂停演示':'自动推进',()=>{if(playing){pause();renderActions();}else{playing=true;step();}});play.disabled=busy&&!playing;box.append(play);
@@ -353,12 +372,12 @@ let lastWidth=0;new ResizeObserver(entries=>{const width=entries[0].contentRect.
 document.addEventListener('visibilitychange',()=>{if(document.hidden){pause();if(panelKind==='identity')closePanel();renderActions();}});
 if(isMultiplayer){
   const {createMultiplayer}=await import('./multiplayer.js');
-  document.querySelector('.scope').textContent='真人联机 · 单实例局域网';
+  document.querySelector('.scope').textContent='';
   multiplayer=createMultiplayer({openPanel,closePanel,showIdentity,rulesPanel,catalogue,receive(snapshot){
     state=snapshot;me=snapshot?.player??null;
     if(!me&&panelKind==='identity')closePanel();
     if(snapshot?.room.status==='playing'||snapshot?.room.status==='finished'){render();}
     else {$('identity-toggle').hidden=!me;}
-    if(panelKind==='identity'&&me)$('panel-body').replaceChildren(roleContent(me.self.role,true));
+    if(panelKind==='identity'&&me)$('panel-body').replaceChildren(identityContent());
   }});
 }else await update('/api/state');

@@ -43,7 +43,7 @@ async function finish(clients,code,route='success'){
     const states=await Promise.all(clients.map(c=>c.state(code)));if(states[0].view.phase==='ended')return states;
     const jobs=[];
     for(let i=0;i<clients.length;i++){
-      const s=states[i],a=s.player.legalActions[0];if(!a)continue;
+      const s=states[i],a=s.player.legalActions[0];if(s.room.discussion?.active&&s.room.discussion.speakerId===s.room.selfId){jobs.push(clients[i].cmd(code,{type:'speak',turnId:s.room.discussion.turnId,text:''}).then(ok));continue;}if(!a)continue;
       const payload=a.type==='propose_team'?{type:a.type,team:a.candidateIds.slice(0,a.teamSize)}:a.type==='vote'?{type:a.type,vote:route==='reject'?'reject':'approve'}:a.type==='quest_card'?{type:a.type,card:route==='sabotage'&&a.choices.includes('fail')?'fail':'success'}:{type:a.type,targetId:a.candidateIds[0]};
       jobs.push(submit(clients[i],code,s,payload).then(ok));
     }

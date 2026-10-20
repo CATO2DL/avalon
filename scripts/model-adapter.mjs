@@ -18,7 +18,7 @@ export function modelAdapter({apiKey=process.env.GEMINI_API_KEY,model=process.en
         worker=workerFactory({workerData:{apiKey,model,input:structuredClone(input)},stdout:true,stderr:true});
         worker.stdout?.resume();worker.stderr?.resume();
         worker.on('message',message=>{
-          if(message.error){finish(new ModelError(errors.has(message.error)?message.error:'NETWORK_ERROR'));return;}
+          if(message.error){const error=new ModelError(errors.has(message.error)?message.error:'NETWORK_ERROR');if(message.formatReason==='MISSING_TOOL_CALL')error.formatReason='MISSING_TOOL_CALL';finish(error);return;}
           try{finish(null,{decision:parseDecision(message.result?.decision,input),model,tokens:Number.isFinite(message.result?.tokens)?message.result.tokens:null});}
           catch{finish(new ModelError('FORMAT_ERROR'));}
         });

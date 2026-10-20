@@ -11,7 +11,7 @@ import { RuleError } from '../src/errors.ts';
 import { roleAssetFiles } from '../web/asset-map.js';
 const files=new Map([
   ['/', ['web/index.html','text/html; charset=utf-8']],
-  ...['app.js','multiplayer.js','asset-map.js','ui.js','layout.js','history.js'].map(n=>[`/${n}`,[`web/${n}`,'text/javascript; charset=utf-8']]),
+  ...['app.js','config-form.js','multiplayer.js','asset-map.js','ui.js','layout.js','history.js'].map(n=>[`/${n}`,[`web/${n}`,'text/javascript; charset=utf-8']]),
   ['/style.css',['web/style.css','text/css; charset=utf-8']],
   ...roleAssetFiles.map(n=>[`/assets/roles/${n}`,[`.local/web-assets/roles/${n}`,'image/webp']]),
 ]);

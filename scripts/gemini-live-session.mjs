@@ -17,7 +17,7 @@ export function liveCloseError(event){
 export function liveDecision(client,model,input,signal){
   try{input=withStrategy(input);}catch(e){return Promise.reject(e);}
   return new Promise((resolve,reject)=>{
-    let session,settled=false,tokens=null;
+    let session,settled=false,tokens=null,repairs=0;
     const close=()=>{try{session?.close();}catch{/* No provider payload in logs. */}};
     const finish=(error,result)=>{if(settled)return;settled=true;signal?.removeEventListener('abort',cancel);close();error?reject(error):resolve(result);};
     const cancel=()=>finish(new ModelError('TIMEOUT'));
@@ -40,7 +40,12 @@ export function liveDecision(client,model,input,signal){
             finish(null,{decision,model,tokens});return;
           }
           // Audio, transcripts and thinking are intentionally never used as game data.
-          if(message.serverContent?.turnComplete)finish(new ModelError('FORMAT_ERROR'));
+          if(message.serverContent?.turnComplete){
+            if(repairs++===0&&session){
+              // Same private session, one bounded correction; never interpret prose as a vote.
+              session.sendClientContent({turns:[{role:'user',parts:[{text:'上一轮没有收到submit_decision工具调用，任何口头赞同都未执行。请现在只调用submit_decision一次。'+(input.kind==='action'?'choice必须是已提供choices的合法整数下标，memory是策略补丁；不要speech字段。':'choice固定0，speech为公开发言，memory为策略补丁。')+'不要复述要求，不输出音频回答，不修改其他玩家信息。'}]}],turnComplete:true});
+            }else{const error=new ModelError('FORMAT_ERROR');error.formatReason='MISSING_TOOL_CALL';finish(error);}
+          }
         }catch(e){finish(safeModelError(e));}
       },
       onerror:e=>finish(liveCloseError(e)),

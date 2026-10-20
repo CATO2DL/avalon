@@ -47,6 +47,7 @@ export function getPublicView(game: Game): PublicView {
     failThreshold: rules.failThresholds[game.questNumber - 1]!, team: game.team,
     rejectionCount: game.rejectionCount,
     submissions: { votes: game.votes.length, questCards: game.questCards.length },
+    submissionPlayers: {votes:game.players.filter(p=>game.votes.some(v=>v.playerId===p.id)).map(p=>p.id),quests:game.players.filter(p=>game.questCards.some(c=>c.playerId===p.id)).map(p=>p.id)},
     score: { good: game.quests.filter(q => q.succeeded).length, evil: game.quests.filter(q => !q.succeeded).length },
     quests: game.quests, events: game.events, outcome: game.outcome,
     ...(game.phase === 'ended' && game.outcome ? {
@@ -192,7 +193,7 @@ export function applyAction(game: Game, playerId: string, action: unknown): Appl
       next.votes = [];
       if (approved) {
         next.phase = 'quest';
-        next.rejectionCount = 0;
+        if(next.config.rejectionMode!=='cumulative')next.rejectionCount = 0;
       } else {
         next.rejectionCount++;
         if (next.rejectionCount === 5) finish(next, { winner: 'evil', reason: 'five_rejections' });

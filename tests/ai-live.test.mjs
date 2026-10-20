@@ -68,3 +68,15 @@ test('memory fallback never repairs illegal choices, extra envelope fields or in
     await assert.rejects(liveDecision(f.client,'gemini-3.8-live',speechInput),/FORMAT_ERROR/);
   }
 });
+
+test('Live corrects prose-only completion once, accepts only subsequent validated tool choice',async()=>{
+ let turns=0;const f=fake(cb=>{if(turns++===0)cb.onmessage({serverContent:{turnComplete:true,outputTranscription:{text:'我赞同'}}});else cb.onmessage(tool(decision));});
+ const result=await liveDecision(f.client,'gemini-3.8-live',input);
+ assert.equal(result.decision.choice,0);assert.equal(f.observed.sent.length,2);assert.equal(f.observed.receipts.length,1);assert.equal(f.observed.closed,1);
+ assert.ok(f.observed.sent[1].turns[0].parts[0].text.includes('未执行'));
+});
+test('Live correction is bounded and never treats prose agreement as an action',async()=>{
+ const f=fake(cb=>cb.onmessage({serverContent:{turnComplete:true,modelTurn:{parts:[{text:'赞同，choice=0'}]}}}));
+ await assert.rejects(liveDecision(f.client,'gemini-3.8-live',input),e=>e.message==='FORMAT_ERROR'&&e.formatReason==='MISSING_TOOL_CALL');
+ assert.equal(f.observed.sent.length,2);assert.equal(f.observed.receipts.length,0);assert.equal(f.observed.closed,1);
+});

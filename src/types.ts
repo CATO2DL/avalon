@@ -6,8 +6,8 @@ export type Vote = 'approve' | 'reject';
 export type QuestCard = 'success' | 'fail';
 export type FiveNumbers = readonly [number, number, number, number, number];
 export interface Player { id: string; name: string }
-export interface GameConfig { playerCount: PlayerCount; roleSet?: 'base' | 'recommended' | 'custom'; roles?: readonly Role[] }
-export interface ResolvedConfig { playerCount: PlayerCount; roleSet: 'base' | 'recommended' | 'custom'; roles: Role[] }
+export interface GameConfig { playerCount: PlayerCount; roleSet?: 'base' | 'recommended' | 'custom'; roles?: readonly Role[]; rejectionMode?: 'consecutive' | 'cumulative' }
+export interface ResolvedConfig { playerCount: PlayerCount; roleSet: 'base' | 'recommended' | 'custom'; roles: Role[]; rejectionMode?: 'consecutive' | 'cumulative' }
 export interface PlayerKnowledge {
   knownAlignments: { playerId: string; alignment: Alignment }[];
   roleCandidates: { kind: 'merlin'; playerIds: string[]; possibleRoles: ('merlin' | 'morgana')[] }[];
@@ -101,6 +101,7 @@ export interface PublicView {
   team: string[];
   rejectionCount: number;
   submissions: { votes: number; questCards: number };
+  submissionPlayers: { votes: string[]; quests: string[] };
   score: { good: number; evil: number };
   quests: QuestResult[];
   events: PublicEvent[];
